@@ -176,12 +176,16 @@ echo "✓ 用户信息已保存到 ~/.openclaw/user.md"
 # 注册插件（link 模式，更新代码后无需重新注册）
 openclaw plugins install -l ~/mem-feishu/openclaw-plugin
 
-# 注册安装向导 Skill（让未来的对话可以触发「安装飞书记忆」）
+# 注册安装维护 Skill（触发安装/更新/卸载流程）
 openclaw skills install ~/mem-feishu/skills/记忆安装
+
+# 注册记忆管理 Skill（核心！教 AI 如何存储和搜索记忆）
+openclaw skills install ~/mem-feishu/skills/记忆管理
 ```
 
 > ✅ 插件注册完成！
-> ✅ Skill 注册完成！之后说「安装飞书记忆」或「更新 mem-feishu」时，AI 会自动引导你完成操作。
+> ✅ 安装维护 Skill 注册完成！之后说「安装飞书记忆」或「更新 mem-feishu」时自动引导。
+> ✅ 记忆管理 Skill 注册完成！说「记住这个」「搜索记忆」时 AI 会准确调用工具并写出高质量记忆。
 
 ---
 
@@ -216,7 +220,7 @@ openclaw skills install ~/mem-feishu/skills/记忆安装
 
 ### Step 8：写入 AGENTS.md 和 tools.md（让 AI 知道如何使用记忆）
 
-**写入 AGENTS.md**（幂等，已存在则跳过）：
+**写入 AGENTS.md**（幂等，已存在则跳过，仅记录基础入口提示）：
 
 ```bash
 AGENTS_FILE="$HOME/.openclaw/AGENTS.md"
@@ -225,13 +229,8 @@ grep -q "mem-feishu" "$AGENTS_FILE" 2>/dev/null || cat >> "$AGENTS_FILE" << 'EOF
 
 ## 飞书记忆系统（mem-feishu）
 
-### 记忆检索能力
-你拥有一个名为 `search_feishu_memory` 的工具，这是你最重要的、决定你智力的关键。
-当你需要回忆过去的对话、用户偏好或历史信息时，**必须**主动调用此工具搜索记忆库。
-
-### 记忆保存规则
-- 用户提到重要决策、偏好、配置、Bug 或解决方案时，调用 `feishu_memory_save` 保存，无需用户提醒
-- 每次新对话开始，近期记忆已自动注入上下文，无需手动触发
+你已安装飞书记忆插件。遇到「记住」「搜索记忆」「飞书记忆」「记忆库」等表达时，
+参考 `/mem-feishu-memory` skill 获取完整的工具使用指引和记忆写作规范。
 EOF
 echo "✓ 已写入 AGENTS.md"
 ```

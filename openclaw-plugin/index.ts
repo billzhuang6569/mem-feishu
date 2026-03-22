@@ -110,7 +110,7 @@ export default function(api: any) {
     description: '将重要信息保存到飞书记忆库。当用户要求记住某件事时调用。',
     parameters: Type.Object({
       content: Type.String({ description: '要保存的记忆内容（精炼后的核心信息）' }),
-      tags: Type.Optional(Type.Array(Type.String(), { description: '分类标签，如：决策、配置、调试、偏好' })),
+      tags: Type.Optional(Type.Array(Type.String(), { description: '分类标签数组，每个标签是独立的字符串元素。正确：["决策", "配置"]。错误：["决策,配置"]（禁止在单个字符串内用逗号/顿号分隔多个标签）。推荐标签：决策/偏好/配置/Bug修复/架构/工作流/技术选型/用户信息。数量 1-4 个。' })),
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async execute(_id: string, params: { content: string; tags?: string[] }) {
