@@ -1,0 +1,12 @@
+{
+  "name": "@local/mem-feishu-openclaw",
+  "version": "0.1.0",
+  "description": "mem-feishu OpenClaw 插件适配层",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.32.0"
+  }
+}
