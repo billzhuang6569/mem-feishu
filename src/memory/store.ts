@@ -15,10 +15,12 @@ export async function getTableId(): Promise<string> {
 export async function saveMemory(input: MemoryInput): Promise<Memory> {
   const tableId = await getTableId();
   const memory = await addRecord(tableId, input);
-  // 同步写入向量库
+  // 同步写入向量库（用飞书 record_id 作为键，与 getRecordsByIds 保持一致）
   try {
-    const vec = await embed(memory.content);
-    upsertVector(memory.id, vec);
+    if (memory.recordId) {
+      const vec = await embed(memory.content);
+      upsertVector(memory.recordId, vec);
+    }
   } catch (e) {
     console.error('[mem-feishu] 向量写入失败（不影响飞书存储）:', e);
   }
