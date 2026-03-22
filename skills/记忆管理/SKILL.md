@@ -90,11 +90,22 @@ tags: ["决策", "配置", "调试"]
 
 ### 来源（source）
 
-自动填写，无需手动干预：
-- `manual`：用户明确要求保存时（工具调用默认值）
-- `openclaw`：对话结束后插件自动捕获（插件在 `agent_end` 填写）
+**调用 `feishu_memory_save` 时，必须填写 `source` 字段，填你自己的 Agent 名称。**
 
-不要手动填写 `openclaw`，也不要填写其他自定义值。
+这个字段用于标识每条记忆是由哪个 AI Agent 写入的，便于后续追溯和过滤。
+
+```
+source: "claude-code"    // Claude Code CLI
+source: "cursor"         // Cursor
+source: "copilot"        // GitHub Copilot
+source: "claude-web"     // Claude.ai 网页版
+source: "openclaw-auto"  // 对话结束后插件自动捕获（插件保留字，勿手动使用）
+```
+
+**规则**：
+- 用你真实的 Agent 标识，**不要填 `manual`、`openclaw`、`unknown`**
+- 不知道自己叫什么？填 `claude`（通用兜底）
+- 自动捕获（`agent_end`）由插件填写 `openclaw-auto`，无需干预
 
 ---
 
@@ -119,7 +130,8 @@ tags: ["决策", "配置", "调试"]
 feishu_memory_save(
   content: "用户偏好：该项目使用 pnpm 作为包管理器，不使用 npm。原因：pnpm 在 monorepo 中性能更好。",
   tags: ["偏好", "工作流"],
-  project: "mem-feishu"  // 从当前目录名推断
+  source: "claude-code",   // 填写你自己的 Agent 名称
+  project: "mem-feishu"
 )
 ```
 
@@ -142,6 +154,7 @@ search_feishu_memory(
 feishu_memory_save(
   content: "【Bug】向量搜索命中但飞书查不到：向量库存的是 UUID，但 getRecordsByIds 需要飞书 record_id。修复：upsertVector 改用 memory.recordId 而非 memory.id。",
   tags: ["Bug修复", "架构"],
+  source: "claude-code",
   project: "mem-feishu"
 )
 ```

@@ -80,7 +80,7 @@ export default function(api: any) {
           'save',
           '--content', content,
           '--tags', `自动,${project}`,
-          '--source', 'openclaw',
+          '--source', 'openclaw-auto',
           '--project', project,
         ], 30000);
       });
@@ -111,16 +111,18 @@ export default function(api: any) {
     parameters: Type.Object({
       content: Type.String({ description: '要保存的记忆内容（精炼后的核心信息）' }),
       tags: Type.Optional(Type.Array(Type.String(), { description: '分类标签数组，每个标签是独立的字符串元素。正确：["决策", "配置"]。错误：["决策,配置"]（禁止在单个字符串内用逗号/顿号分隔多个标签）。推荐标签：决策/偏好/配置/Bug修复/架构/工作流/技术选型/用户信息。数量 1-4 个。' })),
+      source: Type.Optional(Type.String({ description: '记忆来源，填写你自己的 Agent 名称（如 claude-code、cursor、copilot）。这个字段用于标识是哪个 AI Agent 写入的记忆，请务必填写，不要留空。' })),
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async execute(_id: string, params: { content: string; tags?: string[] }) {
+    async execute(_id: string, params: { content: string; tags?: string[]; source?: string }) {
       const tags = params.tags ?? [];
       const project = getProjectName();
+      const source = params.source ?? 'openclaw';
       const out = runCli([
         'save',
         '--content', params.content,
         '--tags', [...tags, project].join(','),
-        '--source', 'openclaw',
+        '--source', source,
         '--project', project,
       ]);
       let ok = false;
