@@ -4,6 +4,9 @@
 
 mem-feishu 是一个为 [OpenClaw](https://openclaw.ai) 设计的记忆插件。它将 AI 的记忆存储在你自己的**飞书多维表格**中——你可以随时打开飞书，像操作表格一样查看、编辑、搜索所有 AI 记忆。
 
+> 📦 仓库地址（国内推荐）：https://gitee.com/billzhuang6569/mem-feishu
+> 📦 GitHub 镜像：https://github.com/billzhuang6569/mem-feishu
+
 - **自动**：每次对话结束后，重要内容自动存入飞书
 - **智能**：下次对话时，相关记忆自动注入上下文，AI 知道你的历史
 - **可视**：所有记忆都在飞书多维表格里，清晰可见，随手可编辑
@@ -19,7 +22,7 @@ mem-feishu 是一个为 [OpenClaw](https://openclaw.ai) 设计的记忆插件。
 
 ```
 帮我安装飞书记忆插件：
-git clone https://github.com/billzhuang6569/mem-feishu && cd mem-feishu && npm install
+git clone https://gitee.com/billzhuang6569/mem-feishu && cd mem-feishu && npm install
 然后按照 skills/记忆安装/SKILL.md 里的步骤引导我完成设置。
 ```
 
@@ -32,7 +35,11 @@ OpenClaw 会帮你运行命令并一步步引导完成配置。
 **第 1 步：克隆并安装依赖**
 
 ```bash
-git clone https://github.com/billzhuang6569/mem-feishu
+# 国内用户（推荐）
+git clone https://gitee.com/billzhuang6569/mem-feishu
+# GitHub 用户
+# git clone https://github.com/billzhuang6569/mem-feishu
+
 cd mem-feishu
 npm install
 npm run build
