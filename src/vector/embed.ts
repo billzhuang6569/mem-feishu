@@ -1,9 +1,11 @@
 /**
- * Google Embedding API（text-embedding-004，768 维）
+ * Google Embedding API（gemini-embedding-2-preview，768 维输出）
  * 需要设置环境变量 GOOGLE_API_KEY
  */
 
-const MODEL = 'text-embedding-004';
+const MODEL = 'gemini-embedding-2-preview';
+// 指定输出维度为 768，与本地 SQLite 向量表匹配
+const OUTPUT_DIMENSIONALITY = 768;
 
 export async function embed(text: string): Promise<Float32Array> {
   const apiKey = process.env.GOOGLE_API_KEY;
@@ -16,6 +18,7 @@ export async function embed(text: string): Promise<Float32Array> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       content: { parts: [{ text }] },
+      outputDimensionality: OUTPUT_DIMENSIONALITY,
     }),
   });
 
