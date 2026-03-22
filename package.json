@@ -1,6 +1,6 @@
 {
   "name": "mem-feishu",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AI 记忆层 — 以飞书多维表格为存储后端，支持本地向量搜索",
   "type": "module",
   "main": "dist/index.js",

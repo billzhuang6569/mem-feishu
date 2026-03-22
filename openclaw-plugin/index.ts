@@ -5,8 +5,9 @@
  * Core 层（../src/）完全独立，本文件是薄的适配层。
  *
  * 使用的 OpenClaw Plugin SDK API：
- *   - api.registerContextEngine() — 自动注入记忆到上下文 + 自动保存
- *   - api.registerTool()          — LLM 可调用的工具（save / search / recent / info）
+ *   - api.on('before_prompt_build') — 每次对话前注入相关记忆到上下文
+ *   - api.on('agent_end')           — 每次对话后自动保存重要内容
+ *   - api.registerTool()            — LLM 可调用的工具（save / search / recent / info）
  *
  * import from: openclaw/plugin-sdk/plugin-entry
  */
@@ -63,73 +64,43 @@ export default definePluginEntry({
     if (cfg.FEISHU_TABLE_NAME) process.env.FEISHU_TABLE_NAME = cfg.FEISHU_TABLE_NAME;
     if (cfg.HF_ENDPOINT) process.env.HF_ENDPOINT = cfg.HF_ENDPOINT;
 
-    // ── Context Engine：记忆注入 + 自动捕获 ─────────────────────────────
-    // kind: "memory" 在 manifest 中声明，通过 plugins.slots.memory 选中本插件
-    api.registerContextEngine?.('mem-feishu', () => ({
-      info: {
-        id: 'mem-feishu',
-        name: '飞书记忆层',
-        ownsCompaction: false,
-      },
+    // ── Hook: 自动注入记忆（每次对话前）──────────────────────────────────
+    api.on?.('before_prompt_build', (event: any) => {
+      // 优先用当前用户消息做语义搜索
+      const userMessage = event?.messages
+        ? [...event.messages].reverse().find((m: { role: string; content: string }) => m.role === 'user')
+        : null;
+      const query = (userMessage?.content ?? '').slice(0, 150);
 
-      // ingest：会话结束时，自动捕获最后一条 assistant 消息
-      async ingest({ messages }: { messages: Array<{ role: string; content: string }> }) {
-        const last = [...messages].reverse().find((m) => m.role === 'assistant');
-        if (last?.content && last.content.length >= 50) {
-          const content = last.content.slice(0, 1000);
-          const project = getProjectName();
-          setImmediate(() => {
-            runCli([
-              'save',
-              '--content', content,
-              '--tags', `自动捕获,${project}`,
-              '--source', 'openclaw',
-              '--project', project,
-            ], 30000);
-          });
-        }
-        return { ingested: true };
-      },
+      let memBlock = '';
+      if (query.length > 5) {
+        memBlock = runCli(['search', '--query', query, '--limit', '10', '--format']);
+      }
+      if (!memBlock) {
+        memBlock = runCli(['recent', '--limit', '5', '--format']);
+      }
 
-      // assemble：每次构建 prompt 前，搜索相关记忆
-      // 通过 systemPromptAddition 注入（官方机制），不往 messages 里插 system 消息
-      // messages 中手动插入 system role 会被 sanitize pipeline 过滤掉
-      async assemble({
-        messages,
-      }: {
-        messages: Array<{ role: string; content: string }>;
-        tokenBudget?: number;
-      }) {
-        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-        const query = (lastUser?.content ?? '').slice(0, 150);
+      return memBlock.trim() ? { appendSystemContext: memBlock.trim() } : {};
+    });
 
-        let memBlock = '';
-        if (query.length > 5) {
-          memBlock = runCli(['search', '--query', query, '--limit', '10', '--format']);
-        }
-        if (!memBlock) {
-          memBlock = runCli(['recent', '--limit', '5', '--format']);
-        }
-
-        return {
-          messages,
-          estimatedTokens: 0,
-          // systemPromptAddition 由 OpenClaw 自动 prepend 到 system prompt 头部
-          systemPromptAddition: memBlock.trim() || undefined,
-        };
-      },
-
-      // compact：委托给 runtime 的默认压缩算法
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async compact(params: any) {
-        try {
-          const { delegateCompactionToRuntime } = await import('openclaw/plugin-sdk/core');
-          return await delegateCompactionToRuntime(params);
-        } catch {
-          return { ok: true, compacted: false };
-        }
-      },
-    }));
+    // ── Hook: 自动保存（每次对话后）──────────────────────────────────────
+    api.on?.('agent_end', async (event: any) => {
+      const messages: Array<{ role: string; content: string }> = event?.messages ?? [];
+      const last = [...messages].reverse().find((m: { role: string; content: string }) => m.role === 'assistant');
+      if (last?.content && last.content.length >= 100) {
+        const content = last.content.slice(0, 500);
+        const project = getProjectName();
+        setImmediate(() => {
+          runCli([
+            'save',
+            '--content', content,
+            '--tags', `自动,${project}`,
+            '--source', 'openclaw',
+            '--project', project,
+          ], 30000);
+        });
+      }
+    });
 
     // ── Tool 1：记忆保存 ───────────────────────────────────────────────────
     api.registerTool({

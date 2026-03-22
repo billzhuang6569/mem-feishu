@@ -16,7 +16,11 @@ export async function saveMemory(input: MemoryInput): Promise<Memory> {
   const tableId = await getTableId();
   const memory = await addRecord(tableId, input);
   // 同步写入向量库
-  const vec = await embed(memory.content);
-  upsertVector(memory.id, vec);
+  try {
+    const vec = await embed(memory.content);
+    upsertVector(memory.id, vec);
+  } catch (e) {
+    console.error('[mem-feishu] 向量写入失败（不影响飞书存储）:', e);
+  }
   return memory;
 }

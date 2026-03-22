@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { createRequire } from 'module';
+import * as sqliteVec from 'sqlite-vec';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,8 +12,6 @@ function getDb(): Database.Database {
   if (!_db) {
     _db = new Database(DB_PATH);
     // 加载 sqlite-vec 扩展
-    const require = createRequire(import.meta.url);
-    const sqliteVec = require('sqlite-vec');
     sqliteVec.load(_db);
     // 建表
     _db.exec(`

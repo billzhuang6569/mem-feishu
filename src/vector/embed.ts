@@ -5,6 +5,7 @@ let _pipeline: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getPipeline(): Promise<any> {
   if (!_pipeline) {
+    process.stderr.write('[mem-feishu] 首次使用：正在加载 embedding 模型（约 80MB，可能需要 1-2 分钟）…\n');
     const transformers = await import('@xenova/transformers');
     const { pipeline, env } = transformers;
 
@@ -19,6 +20,7 @@ async function getPipeline(): Promise<any> {
     }
 
     _pipeline = await pipeline('feature-extraction', MODEL, { quantized: true });
+    process.stderr.write('[mem-feishu] 模型加载完成。\n');
   }
   return _pipeline;
 }
