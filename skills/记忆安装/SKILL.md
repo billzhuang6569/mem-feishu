@@ -170,13 +170,18 @@ echo "✓ 用户信息已保存到 ~/.openclaw/user.md"
 
 ---
 
-### Step 6：注册 OpenClaw 插件
+### Step 6：注册 OpenClaw 插件和 Skill
 
 ```bash
+# 注册插件（link 模式，更新代码后无需重新注册）
 openclaw plugins install -l ~/mem-feishu/openclaw-plugin
+
+# 注册安装向导 Skill（让未来的对话可以触发「安装飞书记忆」）
+openclaw skills install ~/mem-feishu/skills/记忆安装
 ```
 
 > ✅ 插件注册完成！
+> ✅ Skill 注册完成！之后说「安装飞书记忆」或「更新 mem-feishu」时，AI 会自动引导你完成操作。
 
 ---
 
@@ -209,7 +214,9 @@ openclaw plugins install -l ~/mem-feishu/openclaw-plugin
 
 ---
 
-### Step 8：写入 AGENTS.md（让 AI 知道如何使用记忆）
+### Step 8：写入 AGENTS.md 和 tools.md（让 AI 知道如何使用记忆）
+
+**写入 AGENTS.md**（幂等，已存在则跳过）：
 
 ```bash
 AGENTS_FILE="$HOME/.openclaw/AGENTS.md"
@@ -227,6 +234,43 @@ grep -q "mem-feishu" "$AGENTS_FILE" 2>/dev/null || cat >> "$AGENTS_FILE" << 'EOF
 - 每次新对话开始，近期记忆已自动注入上下文，无需手动触发
 EOF
 echo "✓ 已写入 AGENTS.md"
+```
+
+**写入 tools.md**（工具别名映射，帮助 AI 准确识别用户意图）：
+
+```bash
+TOOLS_FILE="$HOME/.openclaw/tools.md"
+mkdir -p "$(dirname "$TOOLS_FILE")"
+grep -q "mem-feishu" "$TOOLS_FILE" 2>/dev/null || cat >> "$TOOLS_FILE" << 'EOF'
+
+## mem-feishu 飞书记忆工具
+
+### 工具识别别名
+以下称呼均指同一套记忆系统，遇到时应主动调用对应工具：
+
+| 用户可能说的话 | 对应工具 |
+|---|---|
+| 记忆库、我的记忆、历史记忆 | `search_feishu_memory` |
+| 飞书记忆、飞书记忆库 | `search_feishu_memory` |
+| 飞书多维表格、飞书表格、多维表格 | `search_feishu_memory` / `feishu_memory_info` |
+| 记住这个、帮我记录、存到记忆 | `feishu_memory_save` |
+| 你还记得吗、之前说过、上次提到 | `search_feishu_memory` |
+| 最近记忆、最近记录、记忆列表 | `feishu_memory_recent` |
+| 记忆表格在哪、飞书链接 | `feishu_memory_info` |
+
+### 工具一览
+
+- `search_feishu_memory(query)` — 语义搜索历史记忆，query 用自然语言描述要找的内容
+- `feishu_memory_save(content, tags?)` — 保存重要信息到飞书记忆库
+- `feishu_memory_recent(limit?)` — 获取最近的记忆列表（默认 20 条）
+- `feishu_memory_info()` — 获取飞书多维表格的直接链接和状态
+
+### 调用原则
+- 用户提到任何上述别名时，**不要等用户明确说「调用工具」**，直接调用
+- 搜索时用语义化 query，而非关键词堆砌（如用「用户偏好的代码风格」而非「偏好 代码」）
+- 安装或更新记忆系统时，调用 `/mem-feishu-setup` skill
+EOF
+echo "✓ 已写入 tools.md"
 ```
 
 ---

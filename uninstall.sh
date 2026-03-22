@@ -14,9 +14,15 @@ openclaw skills uninstall mem-feishu-setup 2>/dev/null && echo "✓ Skill 已卸
 # 清理 AGENTS.md 中注入的记忆规则
 AGENTS_FILE="$HOME/.openclaw/AGENTS.md"
 if [ -f "$AGENTS_FILE" ] && grep -q "mem-feishu" "$AGENTS_FILE" 2>/dev/null; then
-  # 删除 mem-feishu 相关段落
   sed -i.bak '/## 飞书记忆系统（mem-feishu）/,/^## /{ /^## 飞书记忆系统（mem-feishu）/d; /^## /!d }' "$AGENTS_FILE" 2>/dev/null || true
   echo "✓ 已清理 AGENTS.md 中的记忆规则"
+fi
+
+# 清理 tools.md 中注入的工具别名
+TOOLS_FILE="$HOME/.openclaw/tools.md"
+if [ -f "$TOOLS_FILE" ] && grep -q "mem-feishu" "$TOOLS_FILE" 2>/dev/null; then
+  sed -i.bak '/## mem-feishu 飞书记忆工具/,/^## /{ /^## mem-feishu 飞书记忆工具/d; /^## /!d }' "$TOOLS_FILE" 2>/dev/null || true
+  echo "✓ 已清理 tools.md 中的工具别名"
 fi
 
 echo ""
