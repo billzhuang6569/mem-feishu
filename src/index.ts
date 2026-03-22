@@ -4,7 +4,8 @@ import { saveMemory } from './memory/store.js';
 import { searchMemories } from './memory/search.js';
 import { getRecentMemories } from './memory/recent.js';
 import { formatMemories } from './memory/format.js';
-import { ensureTable, getBaseUrl } from './feishu/bitable.js';
+import { ensureTable, getBaseUrl, createBase } from './feishu/bitable.js';
+import { tryGetAppToken, readLocalConfig } from './feishu/client.js';
 
 const program = new Command();
 program.name('mem-feishu').description('AI 记忆层 — 飞书多维表格 + 本地向量搜索').version('0.1.0');
@@ -59,33 +60,65 @@ program
     }
   });
 
-// setup：初始化飞书多维表格
+// setup：初始化飞书多维表格（自动创建 Base，无需预先填写 FEISHU_APP_TOKEN）
 program
   .command('setup')
-  .description('在飞书中创建「AI 记忆库」多维表格（含所有字段）')
+  .description('初始化飞书 AI 记忆库（无 App Token 时自动创建多维表格）')
   .action(async () => {
-    console.log('正在初始化飞书多维表格…');
+    // 检查是否已有 App Token
+    const existingToken = tryGetAppToken();
+
+    if (!existingToken) {
+      // ── 没有 Token：自动创建新的 Bitable Base ──────────────────────────
+      console.log('未检测到 FEISHU_APP_TOKEN，正在自动创建飞书多维表格…');
+      console.log('（需要应用具备「多维表格」权限，详见 README）\n');
+      const tableName = process.env.FEISHU_TABLE_NAME ?? 'AI 记忆库';
+      try {
+        const newToken = await createBase(tableName);
+        const url = `https://feishu.cn/base/${newToken}`;
+        console.log('✓ 飞书多维表格 Base 创建成功！\n');
+        console.log(`  App Token：${newToken}`);
+        console.log(`  直接链接：${url}\n`);
+        console.log('  ⚠️  请将以下环境变量添加到你的 OpenClaw 配置中：');
+        console.log(`  FEISHU_APP_TOKEN=${newToken}`);
+        console.log('\n  Token 已缓存到本地 data/config.json，当前会话可正常使用。');
+      } catch (e) {
+        console.error(`\n✗ 自动创建失败：${e instanceof Error ? e.message : String(e)}`);
+        console.error('\n请手动在飞书中创建多维表格，然后将 App Token 填入环境变量：');
+        console.error('  FEISHU_APP_TOKEN=<你的 App Token>');
+        process.exit(1);
+      }
+    } else {
+      console.log(`检测到 App Token，使用现有多维表格…`);
+    }
+
+    // ── 创建/确认表格和字段 ────────────────────────────────────────────────
+    console.log('\n正在确认「AI 记忆库」表格和字段…');
     const tableId = await ensureTable();
     const url = getBaseUrl();
-    console.log(`✓ 「AI 记忆库」已就绪`);
+    console.log(`\n✓ 「AI 记忆库」已就绪！`);
     console.log(`  飞书表格链接：${url}`);
-    console.log(`  table_id: ${tableId}`);
+    console.log(`  （点击链接即可在飞书中查看和管理所有记忆）`);
+    console.log(`\n  table_id: ${tableId}`);
   });
 
 // info：显示记忆库信息和飞书表格链接
 program
   .command('info')
   .description('显示飞书记忆库的链接和基本信息')
-  .action(async () => {
-    const url = getBaseUrl();
-    const appToken = process.env.FEISHU_APP_TOKEN ?? '（未配置）';
+  .action(() => {
     const tableName = process.env.FEISHU_TABLE_NAME ?? 'AI 记忆库';
+    const appToken = tryGetAppToken();
+    if (!appToken) {
+      console.log('飞书记忆库尚未配置，请先运行：node dist/index.js setup');
+      return;
+    }
+    const url = readLocalConfig().baseUrl ?? `https://feishu.cn/base/${appToken}`;
     const lines = [
       `飞书记忆库「${tableName}」`,
       `直接链接：${url}`,
-      `App Token：${appToken}`,
       '',
-      '提示：点击上方链接可在飞书中查看、编辑和管理所有记忆。',
+      '点击上方链接即可在飞书中查看、编辑、归档所有记忆。',
     ];
     console.log(lines.join('\n'));
   });

@@ -1,4 +1,4 @@
-import { getClient, getAppToken } from './client.js';
+import { getClient, getAppToken, tryGetAppToken, writeLocalConfig } from './client.js';
 import { Memory, MemoryState, MemoryInput, FIELD, TABLE_NAME } from './types.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -11,6 +11,22 @@ const FieldType = {
   DATE: 5,        // 日期
   CHECKBOX: 7,    // 复选框
 };
+
+// 自动创建飞书多维表格 Base，返回 App Token
+// 需要应用具备 bitable:app 权限
+export async function createBase(name: string): Promise<string> {
+  const client = getClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await (client.bitable as any).app.create({
+    data: { name, folder_token: '' },  // folder_token 为空则创建在根目录
+  });
+  const appToken = res?.data?.app?.app_token;
+  if (!appToken) throw new Error('创建飞书多维表格 Base 失败，请检查应用权限（bitable:app）');
+  // 保存到本地，后续不需要重复配置
+  const url = `https://feishu.cn/base/${appToken}`;
+  writeLocalConfig({ appToken, baseUrl: url, createdAt: Date.now() });
+  return appToken;
+}
 
 // 确保多维表格和字段存在，返回 table_id
 export async function ensureTable(): Promise<string> {

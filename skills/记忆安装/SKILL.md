@@ -2,50 +2,66 @@
 
 ## 描述
 
-引导用户完成 mem-feishu 的安装和配置，包括创建飞书应用、获取 App Token、初始化多维表格，并将插件接入 OpenClaw。
+引导用户完成 mem-feishu 的完整安装，包括创建飞书应用、初始化记忆库、配置 OpenClaw 插件。
 
 ## 触发时机
 
-用户说「安装记忆」、「配置飞书记忆」、「设置 mem-feishu」时触发。
+用户说「安装飞书记忆」、「配置记忆插件」、「设置 mem-feishu」时触发。
 
-## 安装步骤
+---
 
-### 第一步：创建飞书应用
+## 安装流程
 
-引导用户完成以下操作：
+### 第一步：确认代码已下载
 
-1. 打开飞书开放平台：https://open.feishu.cn/app
-2. 点击「创建企业自建应用」
-3. 填写应用名称（如「AI 记忆助手」）和描述
-4. 创建后，进入「凭证与基础信息」页面
-5. 复制 **App ID** 和 **App Secret**
-
-### 第二步：配置应用权限
-
-在应用的「权限管理」页面，开启以下权限：
-- `bitable:app`（多维表格读写）
-
-发布应用版本后申请权限审核（企业内部应用通常自动通过）。
-
-### 第三步：创建飞书多维表格
-
-1. 在飞书中创建一个新的多维表格
-2. 打开表格，从 URL 中复制 **App Token**
-   - URL 格式：`https://xxx.feishu.cn/base/<App Token>/...`
-   - App Token 通常以 `Basz` 开头
-
-### 第四步：初始化多维表格结构
+检查 mem-feishu 目录是否存在：
 
 ```bash
-FEISHU_APP_ID=<App ID> FEISHU_APP_SECRET=<App Secret> FEISHU_APP_TOKEN=<App Token> \
-  node /path/to/mem-feishu/dist/index.js setup
+ls mem-feishu/dist/index.js 2>/dev/null && echo "已安装" || echo "需要下载"
 ```
 
-成功后飞书中会出现「AI 记忆库」多维表格，记忆ID 为第一个字段。
+若未安装，执行：
 
-### 第五步：在 OpenClaw 中配置插件
+```bash
+git clone https://github.com/billzhuang6569/mem-feishu
+cd mem-feishu && npm install && npm run build
+```
 
-在 OpenClaw 配置文件（通常 `~/.openclaw/openclaw.json5` 或 `openclaw.config.json5`）中添加：
+### 第二步：引导用户创建飞书应用
+
+告诉用户：
+
+> 需要先在飞书开放平台创建一个应用。步骤如下：
+> 1. 打开 https://open.feishu.cn/app
+> 2. 点击「创建企业自建应用」，命名为「AI 记忆助手」
+> 3. 进入「凭证与基础信息」，复制 **App ID** 和 **App Secret**
+> 4. 进入「权限管理」页面，开启：`bitable:app`（多维表格）
+> 5. 发布版本后，权限生效
+
+请用户告知 App ID 和 App Secret。
+
+### 第三步：运行 setup（自动创建飞书多维表格）
+
+用用户提供的凭证运行 setup：
+
+```bash
+FEISHU_APP_ID=<用户的AppID> FEISHU_APP_SECRET=<用户的AppSecret> \
+  node mem-feishu/dist/index.js setup
+```
+
+**如果用户没有提前创建多维表格**（大多数情况）：setup 会自动创建「AI 记忆库」并输出 App Token 和表格链接。将输出中的 `FEISHU_APP_TOKEN=xxx` 记录下来。
+
+**如果用户已有多维表格**：从飞书表格 URL 中复制 App Token（格式 `Basz...`），然后加上 `FEISHU_APP_TOKEN=xxx` 重新运行 setup。
+
+### 第四步：注册 OpenClaw 插件
+
+```bash
+openclaw plugins install mem-feishu/openclaw-plugin
+```
+
+### 第五步：写入 OpenClaw 配置
+
+将以下内容添加到 OpenClaw 配置文件（通常是 `~/.openclaw/openclaw.json5`）：
 
 ```json5
 {
@@ -54,13 +70,12 @@ FEISHU_APP_ID=<App ID> FEISHU_APP_SECRET=<App Secret> FEISHU_APP_TOKEN=<App Toke
       "mem-feishu": {
         enabled: true,
         env: {
-          FEISHU_APP_ID: "<你的 App ID>",
-          FEISHU_APP_SECRET: "<你的 App Secret>",
-          FEISHU_APP_TOKEN: "<你的 App Token>"
+          FEISHU_APP_ID: "<步骤二获取的 App ID>",
+          FEISHU_APP_SECRET: "<步骤二获取的 App Secret>",
+          FEISHU_APP_TOKEN: "<步骤三输出的 App Token>"
         }
       }
     },
-    // 将 mem-feishu 设为活跃记忆插件（独占 memory 插槽）
     slots: {
       memory: "mem-feishu"
     }
@@ -68,25 +83,17 @@ FEISHU_APP_ID=<App ID> FEISHU_APP_SECRET=<App Secret> FEISHU_APP_TOKEN=<App Toke
 }
 ```
 
-### 第六步：安装插件包
+### 第六步：重启 OpenClaw
 
-```bash
-openclaw plugins install /path/to/mem-feishu/openclaw-plugin
-```
+告知用户重启 OpenClaw 后生效。
 
-或者将插件路径加入 OpenClaw 的插件加载路径配置。
+### 第七步：验证
 
-### 第七步：重启 OpenClaw
+引导用户发送：「记住这个：安装完成」
 
-重启 OpenClaw 使插件和 context engine 生效。之后：
-- 每次对话时，相关历史记忆会**自动注入**到上下文
-- 每次对话结束后，助手回复会**自动保存**到飞书
-- 可随时在飞书多维表格中查看、编辑、归档记忆
-- 可对 LLM 说「记住这个」或「帮我查一下之前...的记录」
+然后问：「我刚才记了什么？」
 
-## 验证
+两步都成功说明安装正常。最后告诉用户：
 
-安装完成后：
-1. 说「记住这个：安装测试成功」→ 触发 `feishu_memory_save` 工具
-2. 说「帮我查一下之前记的内容」→ 触发 `feishu_memory_search` 工具
-3. 打开飞书多维表格，确认「AI 记忆库」中有新记录
+> 你的飞书记忆库已就绪！可以直接在飞书中打开「AI 记忆库」多维表格查看所有记忆。
+> 如果忘记了表格链接，随时可以问我「我的飞书记忆表格在哪里」。
