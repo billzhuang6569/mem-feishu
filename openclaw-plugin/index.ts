@@ -13,12 +13,23 @@
 
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { execFileSync } from 'child_process';
+import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Type } from '@sinclair/typebox';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, '../dist/index.js');
+
+// 从根目录 package.json 读取版本号
+const _require = createRequire(import.meta.url);
+const PKG_VERSION: string = (() => {
+  try {
+    return (_require(path.resolve(__dirname, '../package.json')) as { version: string }).version;
+  } catch {
+    return 'unknown';
+  }
+})();
 
 function runCli(args: string[], timeoutMs = 15000): string {
   try {
@@ -41,6 +52,8 @@ export default definePluginEntry({
   name: '飞书记忆层',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register(api: any) {
+    console.log(`[mem-feishu] v${PKG_VERSION} 已加载`);
+
     // 将 plugins.entries.mem-feishu.config 中的配置注入 process.env
     // （core 层通过 process.env 读取飞书凭证）
     const cfg = api.config ?? {};
@@ -186,8 +199,11 @@ export default definePluginEntry({
         parameters: Type.Object({}),
         async execute(_id: string, _params: Record<string, never>) {
           const out = runCli(['info']);
+          const text = out
+            ? `${out.trim()}\n\nmem-feishu 版本：v${PKG_VERSION}`
+            : `mem-feishu 版本：v${PKG_VERSION}\n\n无法获取记忆库信息，请检查环境变量配置`;
           return {
-            content: [{ type: 'text', text: out || '无法获取记忆库信息，请检查环境变量配置' }],
+            content: [{ type: 'text', text }],
           };
         },
       },

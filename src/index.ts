@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { createRequire } from 'module';
 import { saveMemory } from './memory/store.js';
 import { searchMemories } from './memory/search.js';
 import { getRecentMemories } from './memory/recent.js';
@@ -7,8 +8,17 @@ import { formatMemories } from './memory/format.js';
 import { ensureTable, getBaseUrl, createBase } from './feishu/bitable.js';
 import { tryGetAppToken, readLocalConfig } from './feishu/client.js';
 
+const _require = createRequire(import.meta.url);
+const PKG_VERSION: string = (() => {
+  try {
+    return (_require('../package.json') as { version: string }).version;
+  } catch {
+    return 'unknown';
+  }
+})();
+
 const program = new Command();
-program.name('mem-feishu').description('AI 记忆层 — 飞书多维表格 + 本地向量搜索').version('0.1.0');
+program.name('mem-feishu').description('AI 记忆层 — 飞书多维表格 + 本地向量搜索').version(PKG_VERSION);
 
 // save：保存一条记忆
 program
@@ -115,7 +125,7 @@ program
     }
     const url = readLocalConfig().baseUrl ?? `https://feishu.cn/base/${appToken}`;
     const lines = [
-      `飞书记忆库「${tableName}」`,
+      `飞书记忆库「${tableName}」v${PKG_VERSION}`,
       `直接链接：${url}`,
       '',
       '点击上方链接即可在飞书中查看、编辑、归档所有记忆。',

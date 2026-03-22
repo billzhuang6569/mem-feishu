@@ -4,7 +4,7 @@
   "description": "以飞书多维表格为后端的 AI 记忆层，支持本地向量搜索。自动注入历史记忆，一键保存到飞书。",
   "version": "0.1.0",
   "kind": "memory",
-  "skills": ["../skills/记忆保存", "../skills/记忆查询", "../skills/记忆安装"],
+  "skills": ["../skills/记忆保存", "../skills/记忆查询", "../skills/记忆安装", "../skills/记忆更新"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
