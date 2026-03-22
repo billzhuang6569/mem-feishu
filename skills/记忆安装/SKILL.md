@@ -72,7 +72,7 @@ openclaw plugins install mem-feishu/openclaw-plugin
     entries: {
       "mem-feishu": {
         enabled: true,
-        env: {
+        config: {
           FEISHU_APP_ID: "<步骤二获取的 App ID>",
           FEISHU_APP_SECRET: "<步骤二获取的 App Secret>",
           FEISHU_APP_TOKEN: "<步骤三输出的 App Token>"

@@ -88,7 +88,7 @@ openclaw plugins install ./openclaw-plugin
     entries: {
       "mem-feishu": {
         enabled: true,
-        env: {
+        config: {
           FEISHU_APP_ID: "你的 App ID",
           FEISHU_APP_SECRET: "你的 App Secret",
           FEISHU_APP_TOKEN: "自动创建时输出的 Token"
