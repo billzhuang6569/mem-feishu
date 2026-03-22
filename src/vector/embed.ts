@@ -1,33 +1,29 @@
-const MODEL = 'Xenova/all-MiniLM-L6-v2';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _pipeline: any = null;
+/**
+ * Google Embedding API（text-embedding-004，768 维）
+ * 需要设置环境变量 GOOGLE_API_KEY
+ */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getPipeline(): Promise<any> {
-  if (!_pipeline) {
-    process.stderr.write('[mem-feishu] 首次使用：正在加载 embedding 模型（约 80MB，可能需要 1-2 分钟）…\n');
-    const transformers = await import('@xenova/transformers');
-    const { pipeline, env } = transformers;
+const MODEL = 'text-embedding-004';
 
-    // 强制使用 onnxruntime-web（WASM），避免 onnxruntime-node 的 native binary 依赖
-    // 这使得国内用户无需安装 onnxruntime-node 即可运行
-    env.backends.onnx.wasm.proxy = false;
-
-    // 支持国内 Hugging Face 镜像（HF_ENDPOINT 环境变量）
-    // 示例：HF_ENDPOINT=https://hf-mirror.com
-    if (process.env.HF_ENDPOINT) {
-      env.remoteHost = process.env.HF_ENDPOINT.replace(/\/$/, '') + '/';
-    }
-
-    _pipeline = await pipeline('feature-extraction', MODEL, { quantized: true });
-    process.stderr.write('[mem-feishu] 模型加载完成。\n');
-  }
-  return _pipeline;
-}
-
-// 将文本转换为 384 维 float32 向量
 export async function embed(text: string): Promise<Float32Array> {
-  const pipe = await getPipeline();
-  const output = await pipe(text, { pooling: 'mean', normalize: true });
-  return output.data as Float32Array;
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new Error('GOOGLE_API_KEY 未设置，请在 OpenClaw 插件配置中添加');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:embedContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: { parts: [{ text }] },
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Google Embedding API 错误 ${res.status}: ${body}`);
+  }
+
+  const data = await res.json() as { embedding: { values: number[] } };
+  return new Float32Array(data.embedding.values);
 }

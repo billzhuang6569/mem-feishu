@@ -1,8 +1,8 @@
 {
   "id": "mem-feishu",
   "name": "飞书记忆层",
-  "description": "以飞书多维表格为后端的 AI 记忆层，支持本地向量搜索。自动注入历史记忆，一键保存到飞书。",
-  "version": "0.1.0",
+  "description": "以飞书多维表格为后端的 AI 记忆层，支持向量搜索。新对话自动载入近期记忆，Agent 主动搜索历史。",
+  "version": "1.0.0",
   "kind": "memory",
   "skills": ["../skills/记忆安装"],
   "configSchema": {
@@ -13,12 +13,13 @@
       "FEISHU_APP_SECRET": { "type": "string", "description": "飞书应用 App Secret" },
       "FEISHU_APP_TOKEN":  { "type": "string", "description": "多维表格 Base App Token" },
       "FEISHU_TABLE_NAME": { "type": "string", "description": "表格名称（默认：AI 记忆库）" },
-      "HF_ENDPOINT": { "type": "string", "description": "Hugging Face 镜像地址（国内用户可设为 https://hf-mirror.com）" }
+      "GOOGLE_API_KEY":    { "type": "string", "description": "Google AI API Key（用于文本向量化搜索）" }
     }
   },
   "uiHints": {
-    "FEISHU_APP_ID":     { "label": "飞书 App ID",     "placeholder": "cli_xxxxxxxxxx" },
-    "FEISHU_APP_SECRET": { "label": "飞书 App Secret", "placeholder": "xxxxxxxxxxxx", "sensitive": true },
-    "FEISHU_APP_TOKEN":  { "label": "多维表格 App Token", "placeholder": "Baszxxxxxxxxxx" }
+    "FEISHU_APP_ID":     { "label": "飞书 App ID",        "placeholder": "cli_xxxxxxxxxx" },
+    "FEISHU_APP_SECRET": { "label": "飞书 App Secret",    "placeholder": "xxxxxxxxxxxx", "sensitive": true },
+    "FEISHU_APP_TOKEN":  { "label": "多维表格 App Token",  "placeholder": "Baszxxxxxxxxxx" },
+    "GOOGLE_API_KEY":    { "label": "Google API Key",     "placeholder": "AIza...", "sensitive": true }
   }
 }

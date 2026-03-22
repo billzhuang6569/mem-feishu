@@ -17,7 +17,7 @@ function getDb(): Database.Database {
     _db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vectors USING vec0(
         id TEXT PRIMARY KEY,
-        embedding FLOAT[384]
+        embedding FLOAT[768]
       );
     `);
   }
