@@ -61,6 +61,7 @@ export default definePluginEntry({
     if (cfg.FEISHU_APP_SECRET) process.env.FEISHU_APP_SECRET = cfg.FEISHU_APP_SECRET;
     if (cfg.FEISHU_APP_TOKEN) process.env.FEISHU_APP_TOKEN = cfg.FEISHU_APP_TOKEN;
     if (cfg.FEISHU_TABLE_NAME) process.env.FEISHU_TABLE_NAME = cfg.FEISHU_TABLE_NAME;
+    if (cfg.HF_ENDPOINT) process.env.HF_ENDPOINT = cfg.HF_ENDPOINT;
 
     // ── Context Engine：记忆注入 + 自动捕获 ─────────────────────────────
     // kind: "memory" 在 manifest 中声明，通过 plugins.slots.memory 选中本插件

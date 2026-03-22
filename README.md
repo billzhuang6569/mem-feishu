@@ -41,9 +41,17 @@ git clone https://gitee.com/billzhuang6569/mem-feishu
 # git clone https://github.com/billzhuang6569/mem-feishu
 
 cd mem-feishu
-npm install
+npm install   # .npmrc 已内置 npmmirror 镜像，国内网络直接可用
 npm run build
 ```
+
+> **国内网络说明**：项目内置了 `.npmrc` 自动走 npmmirror.com 镜像。`sharp` 和 `onnxruntime-node` 已设为可选依赖，安装失败会自动跳过，不影响功能（文本 embedding 使用 WASM 运行）。
+>
+> 首次运行时会从 Hugging Face 下载约 23MB 的量化模型。如下载慢，可设置镜像：
+> ```bash
+> HF_ENDPOINT=https://hf-mirror.com node dist/index.js search --query "test"
+> ```
+> 或将 `HF_ENDPOINT=https://hf-mirror.com` 加入 OpenClaw 的 `plugins.entries.mem-feishu.config`。
 
 **第 2 步：创建飞书应用**
 

@@ -5,7 +5,19 @@ let _pipeline: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getPipeline(): Promise<any> {
   if (!_pipeline) {
-    const { pipeline } = await import('@xenova/transformers');
+    const transformers = await import('@xenova/transformers');
+    const { pipeline, env } = transformers;
+
+    // 强制使用 onnxruntime-web（WASM），避免 onnxruntime-node 的 native binary 依赖
+    // 这使得国内用户无需安装 onnxruntime-node 即可运行
+    env.backends.onnx.wasm.proxy = false;
+
+    // 支持国内 Hugging Face 镜像（HF_ENDPOINT 环境变量）
+    // 示例：HF_ENDPOINT=https://hf-mirror.com
+    if (process.env.HF_ENDPOINT) {
+      env.remoteHost = process.env.HF_ENDPOINT.replace(/\/$/, '') + '/';
+    }
+
     _pipeline = await pipeline('feature-extraction', MODEL, { quantized: true });
   }
   return _pipeline;

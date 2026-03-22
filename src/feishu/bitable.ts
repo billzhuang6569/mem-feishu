@@ -184,6 +184,30 @@ export async function deleteRecord(tableId: string, recordId: string): Promise<v
   await updateRecord(tableId, recordId, { state: '已删除' });
 }
 
+// 将多维表格所有权转移给指定用户
+// memberType: 'openid' | 'userid' | 'email'
+// 使用 tenant_access_token，调用飞书 Drive 权限转移 API
+export async function transferOwner(
+  memberType: 'openid' | 'userid' | 'email',
+  memberId: string,
+): Promise<void> {
+  const client = getClient();
+  const appToken = getAppToken();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (client as any).request({
+    method: 'POST',
+    url: `https://open.feishu.cn/open-apis/drive/v1/permissions/${appToken}/members/transfer_owner`,
+    params: {
+      type: 'bitable',
+      remove_old_owner: false,   // 保留应用本身的编辑权限，避免失去访问
+      stay_put: true,            // 文档留在原位置
+      old_owner_perm: 'full_access',
+    },
+    data: { member_type: memberType, member_id: memberId },
+  });
+}
+
 // 获取多维表格的直接访问链接
 // 飞书 Bitable 的 URL 格式：https://feishu.cn/base/{app_token}
 // 注：实际链接会重定向到对应租户域名，但此格式通用可跳转

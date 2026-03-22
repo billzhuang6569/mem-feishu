@@ -5,7 +5,7 @@ import { saveMemory } from './memory/store.js';
 import { searchMemories } from './memory/search.js';
 import { getRecentMemories } from './memory/recent.js';
 import { formatMemories } from './memory/format.js';
-import { ensureTable, getBaseUrl, createBase } from './feishu/bitable.js';
+import { ensureTable, getBaseUrl, createBase, transferOwner } from './feishu/bitable.js';
 import { tryGetAppToken, readLocalConfig } from './feishu/client.js';
 
 const _require = createRequire(import.meta.url);
@@ -131,6 +131,30 @@ program
       '点击上方链接即可在飞书中查看、编辑、归档所有记忆。',
     ];
     console.log(lines.join('\n'));
+  });
+
+// transfer-owner：将多维表格所有权转移给用户
+program
+  .command('transfer-owner')
+  .description('将飞书记忆库所有权转移给指定用户')
+  .option('--openid <id>', '用户 Open ID（格式：ou_xxx）')
+  .option('--userid <id>', '用户 User ID')
+  .option('--email <email>', '用户飞书邮箱')
+  .action(async (opts) => {
+    let memberType: 'openid' | 'userid' | 'email';
+    let memberId: string;
+    if (opts.openid) {
+      memberType = 'openid'; memberId = opts.openid;
+    } else if (opts.userid) {
+      memberType = 'userid'; memberId = opts.userid;
+    } else if (opts.email) {
+      memberType = 'email'; memberId = opts.email;
+    } else {
+      console.error('请提供 --openid、--userid 或 --email 参数');
+      process.exit(1);
+    }
+    await transferOwner(memberType, memberId);
+    console.log(JSON.stringify({ ok: true, message: '所有权已转移，应用保留编辑权限' }));
   });
 
 program.parseAsync(process.argv).catch((err) => {

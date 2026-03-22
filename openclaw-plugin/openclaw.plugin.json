@@ -12,7 +12,8 @@
       "FEISHU_APP_ID":     { "type": "string", "description": "飞书应用 App ID" },
       "FEISHU_APP_SECRET": { "type": "string", "description": "飞书应用 App Secret" },
       "FEISHU_APP_TOKEN":  { "type": "string", "description": "多维表格 Base App Token" },
-      "FEISHU_TABLE_NAME": { "type": "string", "description": "表格名称（默认：AI 记忆库）" }
+      "FEISHU_TABLE_NAME": { "type": "string", "description": "表格名称（默认：AI 记忆库）" },
+      "HF_ENDPOINT": { "type": "string", "description": "Hugging Face 镜像地址（国内用户可设为 https://hf-mirror.com）" }
     }
   },
   "uiHints": {
