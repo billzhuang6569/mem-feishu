@@ -1,5 +1,5 @@
 {
-  "name": "@local/mem-feishu-openclaw",
+  "name": "mem-feishu",
   "version": "1.0.0",
   "description": "mem-feishu OpenClaw 插件适配层",
   "type": "module",
