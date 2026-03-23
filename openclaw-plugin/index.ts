@@ -112,21 +112,23 @@ export default function(api: any) {
     }
   });
 
-  // ── Hook: 新对话第一轮 → 注入近期记忆 ────────────────────────────────
-  api.registerHook?.('before_prompt_build', async (event: any) => {
-    const isFirstTurn = !event.messages || event.messages.length <= 1;
-    if (!isFirstTurn) return {};
+  // ── Hook: 每次构建 Prompt 前 → 注入近期记忆 ──────────────────────────
+  api.on?.('before_prompt_build', async (event: any) => {
+    const prompt = event?.prompt;
+    if (!prompt || prompt.length < 5) return {};
 
     try {
       const memBlock = runCli(['recent', '--limit', '5', '--format']);
       if (memBlock.trim()) {
-        return { systemPromptAddition: `\n### 近期飞书记忆\n${memBlock.trim()}\n` };
+        return {
+          prependContext: `\n<feishu-memories>\n### 来自飞书多维表格的近期记忆\n${memBlock.trim()}\n</feishu-memories>\n`,
+        };
       }
     } catch (e) {
       console.error('[mem-feishu] 注入近期记忆失败:', e);
     }
     return {};
-  });
+  }, { priority: 50 });
 
   // ── Hook: 对话结束 → 自动保存 ──────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
