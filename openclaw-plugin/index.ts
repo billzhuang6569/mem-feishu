@@ -12,6 +12,8 @@
 
 import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Type } from '@sinclair/typebox';
@@ -50,12 +52,42 @@ export default function(api: any) {
   console.log(`[mem-feishu] v${PKG_VERSION} 已加载`);
 
   // 将 openclaw.json5 中 config 配置注入 process.env
-  const cfg = api.config ?? {};
-  if (cfg.FEISHU_APP_ID)     process.env.FEISHU_APP_ID     = cfg.FEISHU_APP_ID;
-  if (cfg.FEISHU_APP_SECRET) process.env.FEISHU_APP_SECRET = cfg.FEISHU_APP_SECRET;
-  if (cfg.FEISHU_APP_TOKEN)  process.env.FEISHU_APP_TOKEN  = cfg.FEISHU_APP_TOKEN;
-  if (cfg.FEISHU_TABLE_NAME) process.env.FEISHU_TABLE_NAME = cfg.FEISHU_TABLE_NAME;
-  if (cfg.GOOGLE_API_KEY)    process.env.GOOGLE_API_KEY    = cfg.GOOGLE_API_KEY;
+  // 1. 先从环境变量收集已有值
+  const cfg: Record<string, string | undefined> = {
+    FEISHU_APP_ID:     process.env.FEISHU_APP_ID,
+    FEISHU_APP_SECRET: process.env.FEISHU_APP_SECRET,
+    FEISHU_APP_TOKEN:  process.env.FEISHU_APP_TOKEN,
+    FEISHU_TABLE_NAME: process.env.FEISHU_TABLE_NAME,
+    GOOGLE_API_KEY:    process.env.GOOGLE_API_KEY,
+  };
+
+  // 2. 环境变量缺失时，主动读取 ~/.openclaw/openclaw.json5
+  if (!cfg.FEISHU_APP_ID || !cfg.GOOGLE_API_KEY) {
+    try {
+      const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json5');
+      if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, 'utf-8');
+        const extract = (key: string): string | undefined => {
+          const m = content.match(new RegExp(`["']?${key}["']?\\s*:\\s*["']([^"']+)["']`));
+          return m?.[1];
+        };
+        for (const key of Object.keys(cfg)) {
+          cfg[key] = cfg[key] ?? extract(key);
+        }
+      }
+    } catch (e) {
+      console.error('[mem-feishu] 读取 openclaw.json5 失败:', e);
+    }
+  }
+
+  // 3. 注入到 process.env，供 runCli 使用
+  for (const [key, val] of Object.entries(cfg)) {
+    if (val) process.env[key] = val;
+  }
+
+  console.log(`[mem-feishu] 环境变量检查:`);
+  console.log(`  FEISHU_APP_ID: ${process.env.FEISHU_APP_ID ? '✅' : '❌'}`);
+  console.log(`  GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? '✅' : '❌'}`);
 
   // ── Hook: 新对话开始 → 注入近期记忆 ──────────────────────────────────
   // 监听 command:new 或 session_start，将最近 5 条记忆注入上下文

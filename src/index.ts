@@ -5,8 +5,10 @@ import { saveMemory } from './memory/store.js';
 import { searchMemories } from './memory/search.js';
 import { getRecentMemories } from './memory/recent.js';
 import { formatMemories } from './memory/format.js';
-import { ensureTable, getBaseUrl, createBase, transferOwner } from './feishu/bitable.js';
+import { ensureTable, getBaseUrl, createBase, transferOwner, listRecent } from './feishu/bitable.js';
 import { tryGetAppToken, readLocalConfig } from './feishu/client.js';
+import { embed } from './vector/embed.js';
+import { upsertVector } from './vector/db.js';
 
 const _require = createRequire(import.meta.url);
 const PKG_VERSION: string = (() => {
@@ -131,6 +133,33 @@ program
       '点击上方链接即可在飞书中查看、编辑、归档所有记忆。',
     ];
     console.log(lines.join('\n'));
+  });
+
+// sync：将飞书所有活跃记忆重新向量化，写入本地 SQLite
+program
+  .command('sync')
+  .description('从飞书拉取所有活跃记忆，重建本地向量索引')
+  .option('-l, --limit <n>', '最多同步条数（默认无限制）', '5000')
+  .action(async (opts) => {
+    const limit = parseInt(opts.limit);
+    const tableId = await ensureTable();
+    const memories = await listRecent(tableId, limit);
+    console.log(`从飞书获取到 ${memories.length} 条活跃记忆，开始向量化...`);
+
+    let success = 0;
+    let failed = 0;
+    for (const mem of memories) {
+      if (!mem.recordId) continue;
+      try {
+        const vector = await embed(mem.content);
+        upsertVector(mem.recordId, vector);
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+
+    console.log(JSON.stringify({ ok: true, total: memories.length, success, failed }));
   });
 
 // transfer-owner：将多维表格所有权转移给用户
