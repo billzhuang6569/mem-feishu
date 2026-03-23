@@ -63,6 +63,7 @@ function getProjectName(): string {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function(api: any) {
   console.log(`[mem-feishu] v${PKG_VERSION} 已加载`);
+  console.log('[mem-feishu] api keys:', Object.keys(api));
 
   // 将 openclaw.json5 中 config 配置注入 process.env
   // 1. 先从环境变量收集已有值
