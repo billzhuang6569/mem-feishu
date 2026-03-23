@@ -141,23 +141,46 @@ export async function getRecordsByIds(tableId: string, recordIds: string[]): Pro
   return results;
 }
 
-// 获取最近 N 条活跃记忆（按创建时间倒序）
+// 获取最近 N 条活跃记忆（按创建时间倒序，支持自动翻页拉取全量）
 export async function listRecent(tableId: string, limit: number): Promise<Memory[]> {
   const client = getClient();
   const appToken = getAppToken();
 
-  const res = await client.bitable.appTableRecord.list({
-    path: { app_token: appToken, table_id: tableId },
-    params: {
-      page_size: Math.min(limit, 100),
-      sort: JSON.stringify([{ field_name: FIELD.CREATED_AT, desc: true }]),
-      filter: `CurrentValue.[${FIELD.STATE}]="活跃"`,
-    },
-  });
+  const allMemories: Memory[] = [];
+  let pageToken: string | undefined = undefined;
+  let hasMore = true;
 
-  return (res.data?.items ?? []).map((item) =>
-    parseFields(item.fields ?? {}, item.record_id)
-  );
+  while (hasMore && allMemories.length < limit) {
+    const res = await client.bitable.appTableRecord.search({
+      path: { app_token: appToken, table_id: tableId },
+      params: {
+        page_size: Math.min(limit - allMemories.length, 500),
+        page_token: pageToken,
+      },
+      data: {
+        sort: [{ field_name: FIELD.CREATED_AT, desc: true }],
+        filter: {
+          conjunction: 'and',
+          conditions: [
+            {
+              field_name: FIELD.STATE,
+              operator: 'is',
+              value: ['活跃'],
+            },
+          ],
+        },
+      },
+    });
+
+    for (const item of res.data?.items ?? []) {
+      allMemories.push(parseFields(item.fields ?? {}, item.record_id));
+    }
+
+    hasMore = res.data?.has_more ?? false;
+    pageToken = res.data?.page_token ?? undefined;
+  }
+
+  return allMemories;
 }
 
 // 更新记忆状态/标签
