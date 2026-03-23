@@ -143,7 +143,22 @@ program
   .action(async (opts) => {
     const limit = parseInt(opts.limit);
     const tableId = await ensureTable();
+    const appToken = tryGetAppToken();
+
+    console.log(`正在连接飞书多维表格...`);
+    console.log(`当前使用的 App Token: ${appToken ? `${appToken.slice(0, 6)}...${appToken.slice(-4)}` : '（未设置）'}`);
+    console.log(`当前读取的 Table ID: ${tableId}`);
+
     const memories = await listRecent(tableId, limit);
+
+    if (memories.length === 0) {
+      console.log(`\n⚠️  未拉取到任何数据。请检查：`);
+      console.log(`1. 飞书表格中是否有数据？（链接：https://feishu.cn/base/${appToken} ）`);
+      console.log(`2. 数据的「状态」列是否为「活跃」？（只有活跃状态的记忆会被同步）`);
+      console.log(`3. 确认上方打印的 App Token 是否与你正在查看的表格 URL 一致。`);
+      return;
+    }
+
     console.log(`从飞书获取到 ${memories.length} 条活跃记忆，开始向量化...`);
 
     let success = 0;
