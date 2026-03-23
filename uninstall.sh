@@ -7,9 +7,10 @@ echo "=== 卸载 mem-feishu ==="
 echo "卸载 Plugin..."
 openclaw plugins uninstall mem-feishu 2>/dev/null && echo "✓ Plugin 已卸载" || echo "（Plugin 未注册或已卸载）"
 
-# 卸载 OpenClaw Skill
-echo "卸载 Skill..."
-openclaw skills uninstall mem-feishu-setup 2>/dev/null && echo "✓ Skill 已卸载" || echo "（Skill 未注册或已卸载）"
+# 卸载 OpenClaw Skills
+echo "卸载 Skills..."
+openclaw skills uninstall mem-feishu-setup 2>/dev/null && echo "✓ mem-feishu-setup Skill 已卸载" || echo "（mem-feishu-setup 未注册或已卸载）"
+openclaw skills uninstall mem-feishu-memory 2>/dev/null && echo "✓ mem-feishu-memory Skill 已卸载" || echo "（mem-feishu-memory 未注册或已卸载）"
 
 # 清理 AGENTS.md 中注入的记忆规则
 AGENTS_FILE="$HOME/.openclaw/AGENTS.md"

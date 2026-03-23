@@ -31,15 +31,28 @@ const PKG_VERSION: string = (() => {
 })();
 
 function runCli(args: string[], timeoutMs = 15000): string {
-  try {
-    return execFileSync('node', [CLI, ...args], {
-      encoding: 'utf8',
-      timeout: timeoutMs,
-      env: process.env,
-    });
-  } catch {
-    return '';
+  return execFileSync('node', [CLI, ...args], {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    env: process.env,
+  });
+}
+
+function friendlyError(e: unknown, action: string): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (msg.includes('FEISHU_APP_ID') || msg.includes('FEISHU_APP_SECRET') || msg.includes('401') || msg.includes('AppID')) {
+    return `${action}失败：飞书 App ID 或 App Secret 无效，请检查 openclaw.json5 中的配置。`;
   }
+  if (msg.includes('FEISHU_APP_TOKEN') || msg.includes('app_token') || msg.includes('403')) {
+    return `${action}失败：飞书多维表格 Token 无效或无权限，请重新运行 setup 命令。`;
+  }
+  if (msg.includes('GOOGLE_API_KEY') || msg.includes('API_KEY') || msg.includes('apiKey') || msg.includes('embedding')) {
+    return `${action}失败：Google API Key 无效或未配置，请检查 openclaw.json5 中的 GOOGLE_API_KEY。`;
+  }
+  if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+    return `${action}失败：请求超时，请检查网络连接或代理设置。`;
+  }
+  return `${action}失败，请检查配置是否正确。（详情：${msg.slice(0, 100)}）`;
 }
 
 function getProjectName(): string {
@@ -89,6 +102,15 @@ export default function(api: any) {
   console.log(`  FEISHU_APP_ID: ${process.env.FEISHU_APP_ID ? '✅' : '❌'}`);
   console.log(`  GOOGLE_API_KEY: ${process.env.GOOGLE_API_KEY ? '✅' : '❌'}`);
 
+  // ── 健康检查：启动时轻量探测飞书连通性 ──────────────────────────────────
+  setImmediate(() => {
+    try {
+      runCli(['info'], 8000);
+    } catch {
+      console.warn('[mem-feishu] ⚠️  飞书 Token 无效，插件可能无法正常工作。请检查 openclaw.json5 中的 FEISHU_APP_TOKEN 配置。');
+    }
+  });
+
   // ── Hook: 新对话开始 → 注入近期记忆 ──────────────────────────────────
   // 监听 command:new 或 session_start，将最近 5 条记忆注入上下文
   const injectRecentMemories = () => {
@@ -129,10 +151,12 @@ export default function(api: any) {
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async execute(_id: string, params: { query: string; limit?: number }) {
-      const out = runCli(['search', '--query', params.query, '--limit', String(params.limit ?? 10), '--format']);
-      return {
-        content: [{ type: 'text', text: out || '未找到相关记忆' }],
-      };
+      try {
+        const out = runCli(['search', '--query', params.query, '--limit', String(params.limit ?? 10), '--format']);
+        return { content: [{ type: 'text', text: out || '未找到相关记忆' }] };
+      } catch (e) {
+        return { isError: true, content: [{ type: 'text', text: friendlyError(e, '搜索记忆') }] };
+      }
     },
   });
 
@@ -147,21 +171,23 @@ export default function(api: any) {
     }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async execute(_id: string, params: { content: string; tags?: string[]; source?: string }) {
-      const tags = params.tags ?? [];
-      const project = getProjectName();
-      const source = params.source ?? 'openclaw';
-      const out = runCli([
-        'save',
-        '--content', params.content,
-        '--tags', [...tags, project].join(','),
-        '--source', source,
-        '--project', project,
-      ]);
-      let ok = false;
-      try { ok = JSON.parse(out).ok; } catch { /* ignore */ }
-      return {
-        content: [{ type: 'text', text: ok ? '✓ 已保存到飞书记忆库' : `保存失败：${out}` }],
-      };
+      try {
+        const tags = params.tags ?? [];
+        const project = getProjectName();
+        const source = params.source ?? 'openclaw';
+        const out = runCli([
+          'save',
+          '--content', params.content,
+          '--tags', [...tags, project].join(','),
+          '--source', source,
+          '--project', project,
+        ]);
+        let ok = false;
+        try { ok = JSON.parse(out).ok; } catch { /* ignore */ }
+        return { content: [{ type: 'text', text: ok ? '✓ 已保存到飞书记忆库' : `保存失败：${out}` }] };
+      } catch (e) {
+        return { isError: true, content: [{ type: 'text', text: friendlyError(e, '保存记忆') }] };
+      }
     },
   });
 
@@ -175,10 +201,12 @@ export default function(api: any) {
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async execute(_id: string, params: { limit?: number }) {
-        const out = runCli(['recent', '--limit', String(params.limit ?? 20), '--format']);
-        return {
-          content: [{ type: 'text', text: out || '暂无记忆记录' }],
-        };
+        try {
+          const out = runCli(['recent', '--limit', String(params.limit ?? 20), '--format']);
+          return { content: [{ type: 'text', text: out || '暂无记忆记录' }] };
+        } catch (e) {
+          return { isError: true, content: [{ type: 'text', text: friendlyError(e, '获取最近记忆') }] };
+        }
       },
     },
     { optional: true },
@@ -192,13 +220,15 @@ export default function(api: any) {
       parameters: Type.Object({}),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async execute(_id: string, _params: Record<string, never>) {
-        const out = runCli(['info']);
-        const text = out
-          ? `${out.trim()}\n\nmem-feishu 版本：v${PKG_VERSION}`
-          : `mem-feishu 版本：v${PKG_VERSION}\n\n无法获取记忆库信息，请检查环境变量配置`;
-        return {
-          content: [{ type: 'text', text }],
-        };
+        try {
+          const out = runCli(['info']);
+          const text = out
+            ? `${out.trim()}\n\nmem-feishu 版本：v${PKG_VERSION}`
+            : `mem-feishu 版本：v${PKG_VERSION}\n\n无法获取记忆库信息，请检查环境变量配置`;
+          return { content: [{ type: 'text', text }] };
+        } catch (e) {
+          return { isError: true, content: [{ type: 'text', text: friendlyError(e, '获取记忆库信息') }] };
+        }
       },
     },
     { optional: true },

@@ -303,11 +303,18 @@ openclaw restart
 
 ## 更新流程
 
+当用户要求更新时，请直接执行以下命令：
+
 ```bash
-cd ~/mem-feishu && git pull && bash install.sh && openclaw restart
+cd ~/mem-feishu && bash update.sh
 ```
 
-> ✅ 链接模式安装（`-l`）无需重新注册，重启即可生效。
+执行成功后，必须告诉用户："更新已完成！为了让新版本生效，我需要重启一下自己。"
+然后执行：
+
+```bash
+openclaw restart
+```
 
 ---
 
