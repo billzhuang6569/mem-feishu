@@ -9,6 +9,7 @@
  */
 
 import * as lark from '@larksuiteoapi/node-sdk';
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -110,9 +111,14 @@ export class FeishuMemoryBackend {
       throw new Error('[mem-feishu] 缺少 GOOGLE_API_KEY');
     }
 
+    // proxy: false 强制飞书请求直连，避免本地 http 代理将 HTTPS 请求降级为明文
+    // Google Embedding/Chat API 仍通过 undici ProxyAgent 走代理（见 _makeDispatcher）
+    const httpInstance = axios.create({ proxy: false });
     this.client = new lark.Client({
       appId: config.FEISHU_APP_ID,
       appSecret: config.FEISHU_APP_SECRET,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      httpInstance: httpInstance as any,
     });
 
     // App Token 优先使用传入配置，其次读取本地缓存

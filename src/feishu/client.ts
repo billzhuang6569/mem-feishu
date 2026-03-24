@@ -1,4 +1,5 @@
 import * as lark from '@larksuiteoapi/node-sdk';
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -38,7 +39,11 @@ export function getClient(): lark.Client {
     if (!appId || !appSecret) {
       throw new Error('缺少环境变量：FEISHU_APP_ID 或 FEISHU_APP_SECRET\n请先运行 setup 完成配置。');
     }
-    _client = new lark.Client({ appId, appSecret });
+    // proxy: false 强制飞书请求直连，避免本地 http 代理将 HTTPS 请求降级为明文
+    // Google Embedding API 仍通过 undici ProxyAgent 走代理（见 embed.ts）
+    const httpInstance = axios.create({ proxy: false });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _client = new lark.Client({ appId, appSecret, httpInstance: httpInstance as any });
   }
   return _client;
 }
