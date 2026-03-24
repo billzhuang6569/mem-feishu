@@ -595,7 +595,51 @@ function formatMemoriesBlock(memories) {
 
 ---
 
-## 6. 实施路径与行动计划
+## 6. SKILL 规范与重构建议
+
+在之前的版本中，团队开发了两个 SKILL：`记忆安装` 和 `记忆管理`。结合 OpenClaw 的最新 SKILL 规范，我们需要对它们进行重新评估和调整。
+
+### 6.1 OpenClaw SKILL 核心概念澄清
+
+- **Plugin Hook**（如 `before_prompt_build`、`agent_end`）：是框架级别的自动化机制，由框架在特定生命周期节点自动触发，**不需要 Agent 主动决策**。
+- **Skill**（如 `SKILL.md`）：是教 Agent "在什么情况下该做什么"的提示词，**需要 Agent 理解并主动执行**。
+
+### 6.2 现有 SKILL 评估与处理建议
+
+#### 1. `记忆安装` SKILL：保留并优化
+- **评估**：**非常有价值**。安装、更新、卸载是需要 Agent 引导用户完成的交互流程，这正是 Skill 的最佳使用场景。
+- **改进建议**：
+  - 既然插件已经在 `openclaw.plugin.json` 中声明了 `"skills": ["../skills/记忆安装", "../skills/记忆管理"]`，那么只要用户启用了插件，Skill 就会自动加载。
+  - 因此，安装脚本（`install.sh` / `update.sh`）中**不需要再手动执行 `openclaw skills install`**，这会导致重复注册。
+
+#### 2. `记忆管理` SKILL：大幅精简
+- **评估**：**部分冗余，需要精简**。
+- **冗余部分（应删除）**：
+  - 告诉 Agent "新对话自动载入近期记忆"或"对话结束自动保存"的指令。这些已经由 `before_prompt_build` 和 `agent_end` 钩子在后台自动完成了，不需要 Agent 操心，写在 Skill 里只会浪费 Token。
+- **保留部分（核心价值）**：
+  - 当用户**主动**说"记住这个"或"你还记得吗"时，Agent 需要调用 `feishu_memory_save` 或 `search_feishu_memory` 工具。
+  - Skill 需要教 Agent **如何写好一条记忆**（内容提炼原则、标签规范、source 字段填写等）。
+- **改进建议**：
+  - 将该 Skill 重新定位为"记忆工具使用指南"。
+  - 明确告诉 Agent：日常对话不需要你手动存记忆（有自动钩子），**只有当用户明确要求记录，或者你认为得出了极其重要的架构决策时，才手动调用工具**。
+
+### 6.3 插件自带 Skill 的最佳实践
+
+目前 `mem-feishu` 已经在 `openclaw.plugin.json` 中正确声明了自带 Skills：
+
+```json
+{
+  "skills": ["../skills/记忆安装", "../skills/记忆管理"]
+}
+```
+
+这是非常好的做法。开发团队需要做的清理工作是：
+1. 移除 `update.sh` 和 `uninstall.sh` 中所有关于 `openclaw skills install/uninstall` 的命令。
+2. 移除向 `~/.openclaw/AGENTS.md` 和 `~/.openclaw/tools.md` 强行写入内容的逻辑。这些提示词应该内聚在 Skill 文件本身中，而不是污染用户的全局配置文件。
+
+---
+
+## 7. 实施路径与行动计划
 
 ### Phase 1：架构修正（预计 3-5 天）
 
@@ -645,7 +689,7 @@ function formatMemoriesBlock(memories) {
 
 ---
 
-## 7. 附录：mem9 关键源码参考
+## 8. 附录：mem9 关键源码参考
 
 以下是 mem9 仓库中与 mem-feishu 重构直接相关的文件清单，开发团队在实现时应逐一参考：
 
@@ -664,7 +708,7 @@ function formatMemoriesBlock(memories) {
 
 ---
 
-## 8. 参考文献
+## 9. 参考文献
 
 [1] OpenClaw Plugin SDK Overview. https://docs.openclaw.ai/plugins/sdk-overview
 
