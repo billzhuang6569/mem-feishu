@@ -1,5 +1,5 @@
 import { getClient, getAppToken, tryGetAppToken, writeLocalConfig } from './client.js';
-import { Memory, MemoryState, MemoryInput, FIELD, TABLE_NAME } from './types.js';
+import { Memory, MemoryType, MemoryState, MemoryInput, FIELD, TABLE_NAME } from './types.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // 飞书字段类型枚举（Bitable API）
@@ -38,6 +38,8 @@ export async function ensureTable(): Promise<string> {
   const tables = listRes.data?.items ?? [];
   const existing = tables.find((t) => t.name === TABLE_NAME);
   if (existing?.table_id) {
+    // 旧表存在：补充 v2.0 新字段（幂等）
+    await ensureNewFields(client, appToken, existing.table_id);
     return existing.table_id;
   }
 
@@ -48,6 +50,9 @@ export async function ensureTable(): Promise<string> {
   });
   const tableId = createRes.data?.table_id;
   if (!tableId) throw new Error('创建多维表格失败');
+
+  // 若表已存在（上面 existing 有值），补充 v2.0 新字段（幂等）
+  // 此处 tableId 是新建表的 ID，已存在表的逻辑在下方注释说明
 
   // 飞书新建表格会自动创建一个「文本」默认字段。
   // 我们需要：记忆ID（文本，第一字段）、内容（文本）、标签（多选）、来源（单选）、状态（单选）、项目（文本）、创建时间（日期）
@@ -63,14 +68,18 @@ export async function ensureTable(): Promise<string> {
     });
   }
 
-  // 依次创建剩余字段
+  // 依次创建剩余字段（v2.0 包含新字段）
   const fieldsToCreate = [
     { field_name: FIELD.CONTENT, type: FieldType.TEXT },
     { field_name: FIELD.TAGS, type: FieldType.MULTISELECT },
     { field_name: FIELD.SOURCE, type: FieldType.SELECT },
     { field_name: FIELD.STATE, type: FieldType.SELECT },
+    { field_name: FIELD.MEMORY_TYPE, type: FieldType.SELECT },
     { field_name: FIELD.PROJECT, type: FieldType.TEXT },
+    { field_name: FIELD.SESSION_ID, type: FieldType.TEXT },
+    { field_name: FIELD.SUPERSEDED_BY, type: FieldType.TEXT },
     { field_name: FIELD.CREATED_AT, type: FieldType.DATE },
+    { field_name: FIELD.UPDATED_AT, type: FieldType.DATE },
   ];
 
   for (const field of fieldsToCreate) {
@@ -97,8 +106,12 @@ export async function addRecord(tableId: string, input: MemoryInput): Promise<Me
     [FIELD.TAGS]: input.tags ?? [],
     [FIELD.SOURCE]: input.source ?? 'manual',
     [FIELD.STATE]: '活跃',
+    [FIELD.MEMORY_TYPE]: input.memoryType ?? 'insight',
     [FIELD.PROJECT]: input.project ?? '',
+    [FIELD.SESSION_ID]: input.sessionId ?? '',
+    [FIELD.SUPERSEDED_BY]: '',
     [FIELD.CREATED_AT]: now,
+    [FIELD.UPDATED_AT]: now,
   };
 
   const res = await client.bitable.appTableRecord.create({
@@ -114,8 +127,11 @@ export async function addRecord(tableId: string, input: MemoryInput): Promise<Me
     tags: input.tags ?? [],
     source: input.source ?? 'manual',
     state: '活跃',
+    memoryType: input.memoryType ?? 'insight',
     project: input.project,
+    sessionId: input.sessionId,
     createdAt: now,
+    updatedAt: now,
     recordId,
   };
 }
@@ -183,18 +199,20 @@ export async function listRecent(tableId: string, limit: number): Promise<Memory
   return allMemories;
 }
 
-// 更新记忆状态/标签
+// 更新记忆状态/标签/类型等字段
 export async function updateRecord(
   tableId: string,
   recordId: string,
-  patch: Partial<{ state: MemoryState; tags: string[] }>
+  patch: Partial<{ state: MemoryState; tags: string[]; memoryType: MemoryType; supersededBy: string }>
 ): Promise<void> {
   const client = getClient();
   const appToken = getAppToken();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fields: Record<string, any> = {};
+  const fields: Record<string, any> = { [FIELD.UPDATED_AT]: Date.now() };
   if (patch.state !== undefined) fields[FIELD.STATE] = patch.state;
   if (patch.tags !== undefined) fields[FIELD.TAGS] = patch.tags;
+  if (patch.memoryType !== undefined) fields[FIELD.MEMORY_TYPE] = patch.memoryType;
+  if (patch.supersededBy !== undefined) fields[FIELD.SUPERSEDED_BY] = patch.supersededBy;
 
   await client.bitable.appTableRecord.update({
     path: { app_token: appToken, table_id: tableId, record_id: recordId },
@@ -239,6 +257,36 @@ export function getBaseUrl(): string {
   return `https://feishu.cn/base/${appToken}`;
 }
 
+// 对已存在的旧表补充 v2.0 新字段（幂等，字段已存在时跳过）
+async function ensureNewFields(
+  client: ReturnType<typeof getClient>,
+  appToken: string,
+  tableId: string
+): Promise<void> {
+  const fieldsRes = await client.bitable.appTableField.list({
+    path: { app_token: appToken, table_id: tableId },
+  });
+  const existingNames = new Set((fieldsRes.data?.items ?? []).map((f) => f.field_name ?? ''));
+
+  const newFields = [
+    { field_name: FIELD.MEMORY_TYPE, type: FieldType.SELECT },
+    { field_name: FIELD.SESSION_ID, type: FieldType.TEXT },
+    { field_name: FIELD.SUPERSEDED_BY, type: FieldType.TEXT },
+    { field_name: FIELD.UPDATED_AT, type: FieldType.DATE },
+  ];
+
+  for (const field of newFields) {
+    if (!existingNames.has(field.field_name)) {
+      try {
+        await client.bitable.appTableField.create({
+          path: { app_token: appToken, table_id: tableId },
+          data: field,
+        });
+      } catch { /* 忽略已存在的情况 */ }
+    }
+  }
+}
+
 // 将飞书字段 map 转换为 Memory
 function parseFields(fields: Record<string, unknown>, recordId?: string): Memory {
   const tagsRaw = fields[FIELD.TAGS];
@@ -271,14 +319,32 @@ function parseFields(fields: Record<string, unknown>, recordId?: string): Memory
     ? projectRaw.map((c: unknown) => (typeof c === 'object' && c !== null && 'text' in c ? String((c as { text: unknown }).text) : String(c))).join('')
     : String(projectRaw ?? '');
 
+  // memoryType：空值默认 pinned（老数据兼容）
+  const memTypeRaw = fields[FIELD.MEMORY_TYPE];
+  const memTypeStr = typeof memTypeRaw === 'object' && memTypeRaw !== null && 'text' in memTypeRaw
+    ? String((memTypeRaw as { text: unknown }).text)
+    : String(memTypeRaw ?? '');
+  const memoryType: MemoryType = memTypeStr === 'insight' ? 'insight' : 'pinned';
+
+  const getText = (raw: unknown): string => {
+    if (Array.isArray(raw)) {
+      return raw.map((c: unknown) => (typeof c === 'object' && c !== null && 'text' in c ? String((c as { text: unknown }).text) : String(c))).join('');
+    }
+    return String(raw ?? '');
+  };
+
   return {
     id,
     content,
     tags,
     source,
     state,
+    memoryType,
     project: project || undefined,
+    sessionId: getText(fields[FIELD.SESSION_ID]) || undefined,
+    supersededBy: getText(fields[FIELD.SUPERSEDED_BY]) || undefined,
     createdAt: typeof fields[FIELD.CREATED_AT] === 'number' ? (fields[FIELD.CREATED_AT] as number) : Date.now(),
+    updatedAt: typeof fields[FIELD.UPDATED_AT] === 'number' ? (fields[FIELD.UPDATED_AT] as number) : undefined,
     recordId,
   };
 }

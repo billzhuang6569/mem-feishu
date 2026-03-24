@@ -1,8 +1,8 @@
 {
   "id": "mem-feishu",
   "name": "飞书记忆层",
-  "description": "以飞书多维表格为后端的 AI 记忆层，支持向量搜索。新对话自动载入近期记忆，Agent 主动搜索历史。",
-  "version": "1.0.0",
+  "description": "以飞书多维表格为后端的 AI 记忆层，支持向量搜索。新对话自动注入语义相关记忆，对话结束智能提炼原子事实存入记忆库。",
+  "version": "2.0.0",
   "kind": "memory",
   "skills": ["../skills/记忆安装", "../skills/记忆管理"],
   "configSchema": {

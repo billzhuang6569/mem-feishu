@@ -11,13 +11,10 @@ git pull origin main
 echo "重新构建..."
 bash install.sh
 
-# 3. 重新注册 Plugin 和 Skills（确保 OpenClaw 载入最新配置和指令）
-echo "更新 OpenClaw 插件和 Skills..."
-openclaw plugins install -l ~/mem-feishu/openclaw-plugin
-openclaw skills install ~/mem-feishu/skills/记忆安装
-openclaw skills install ~/mem-feishu/skills/记忆管理
+# 注意：插件和 Skills 已在 openclaw.plugin.json 中声明，OpenClaw 会自动加载最新版本。
+# 无需手动执行 openclaw plugins/skills install。
 
-# 4. 预留：数据迁移（如向量维度变化，自动重建本地向量库）
+# 预留：数据迁移（如向量维度变化，自动重建本地向量库）
 # node dist/index.js sync || true
 
 echo ""
