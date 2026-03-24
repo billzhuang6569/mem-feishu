@@ -234,7 +234,64 @@ api.on("before_reset", async (event) => {
 
 ## 4. 记忆存储方案：怎么存才能真正增强上下文
 
-### 4.1 记忆长什么样？（飞书多维表格字段设计）
+### 4.1 核心架构：飞书主库 + 本地向量库的"双引擎"模式
+
+飞书多维表格本质上是一个在线文档，它只能进行"精确查找"和"文字包含"等简单搜索，完全不具备"语义理解"能力。因此，**现有的"本地向量数据库 + Google 向量模型"方案是必须保留的，不需要改动**。
+
+整体架构是一个"双引擎"模式：
+
+```text
+飞书多维表格（主库）          本地 sqlite-vec（向量索引）
+┌─────────────────┐          ┌─────────────────┐
+│ 记忆ID          │          │ 记忆ID（关联键） │
+│ 内容            │  ◄─同步─► │ 向量（768维数字）│
+│ 标签/类型/状态   │          └─────────────────┘
+│ 创建时间...      │
+└─────────────────┘
+     ▲                              ▲
+     │                              │
+  关键词搜索                      语义搜索
+  （飞书API文本匹配）            （Google向量模型）
+```
+
+- **飞书多维表格**：负责存储完整记忆数据，提供可视化管理、筛选和关键词搜索能力。
+- **本地向量数据库**：负责"理解语义"的搜索能力，通过计算向量距离找出语义最相近的记忆。
+- **Google 向量模型**：负责将文本转换为数字向量（Embedding）。
+
+每次存入新记忆时，必须同时写入飞书和本地向量库。搜索时，两边分别检索，然后合并结果（详见 5.2 节）。
+
+### 4.2 Google Embedding 模型规范与避坑指南
+
+在之前的开发中，团队曾因知识滞后导致模型名称错误或维度不匹配。以下是截至 2026 年 3 月的最新 Google Embedding 模型规范，请开发团队严格遵守：
+
+**1. 当前推荐模型**
+- **`gemini-embedding-2-preview`**（最新多模态模型，推荐）
+- **`gemini-embedding-001`**（稳定版文本模型）
+
+> **注意**：旧版的 `text-embedding-004` 和 `embedding-001` 均已废弃且不可用，调用会返回 404 错误。
+
+**2. 维度不匹配的陷阱与解决方案**
+- 旧版 `text-embedding-004` 的默认维度是 **768**。
+- 新版 `gemini-embedding-001` 和 `gemini-embedding-2-preview` 的默认维度是 **3072**。
+- **问题**：如果直接更换模型名称而不做其他修改，会导致生成的 3072 维向量无法插入到本地已建好的 768 维 sqlite-vec 表中，引发 `Dimension mismatch` 错误。
+- **解决方案**：在调用 API 时，**必须显式指定 `outputDimensionality: 768`**。Google 官方也推荐 768 维作为生产环境的性价比最优选择。
+
+**3. 正确的 API 调用示例（与现有 `embed.ts` 保持一致）**
+
+```typescript
+const MODEL = 'gemini-embedding-2-preview';
+const OUTPUT_DIMENSIONALITY = 768;
+
+// API 请求体必须包含 outputDimensionality
+const body = JSON.stringify({
+  content: { parts: [{ text }] },
+  outputDimensionality: OUTPUT_DIMENSIONALITY,
+});
+```
+
+> **现有代码检查结论**：目前 `mem-feishu/src/vector/embed.ts` 中的配置（使用 `gemini-embedding-2-preview` 并指定 `outputDimensionality: 768`）是**完全正确**的，请保持现状，不要随意更改维度，否则会导致本地向量库重建。
+
+### 4.3 记忆长什么样？（飞书多维表格字段设计）
 
 当前 mem-feishu 的表结构需要扩展。以下是建议的字段设计，对标 mem9 的数据模型 [5]：
 
@@ -255,7 +312,7 @@ api.on("before_reset", async (event) => {
 
 > **核心原则**：记忆的"内容"字段应该是**提炼后的原子事实**，而不是对话原文。一条好的记忆应该是自包含的、可独立理解的、有长期价值的。
 
-### 4.2 怎么存？（两阶段智能记忆管线）
+### 4.4 怎么存？（两阶段智能记忆管线）
 
 这是 mem9 最核心的设计，也是 mem-feishu 当前最缺失的能力。在 `agent_end` 钩子触发时，不要直接保存对话原文，而是执行以下两阶段操作：
 
@@ -370,7 +427,7 @@ Return ONLY valid JSON.
 
 > **关键保护机制**：mem9 在执行对账操作时，**绝不自动更新或删除 `pinned` 类型的记忆**。如果 LLM 判断需要 UPDATE 一条 pinned 记忆，系统会将其降级为 ADD（新增一条 insight），保护用户显式设置的偏好不被自动覆盖。
 
-### 4.3 `agent_end` 钩子的完整实现模板
+### 4.5 `agent_end` 钩子的完整实现模板
 
 ```typescript
 api.on("agent_end", async (event, context) => {
