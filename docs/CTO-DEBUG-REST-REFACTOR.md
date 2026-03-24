@@ -1,4 +1,4 @@
-# CTO 指导：绕过飞书 SDK，改用原生 HTTP 请求直连飞书
+# CTO 指导：绕过飞书 SDK，改用原生 HTTP 请求直连飞书 (v2)
 
 ## 1. 为什么必须抛弃飞书 SDK？
 
@@ -8,15 +8,9 @@
 
 飞书的 API 非常简单，我们只需要自己维护一个 `tenant_access_token`，然后带上这个 Token 去请求 Bitable 的接口即可。这样每一行网络请求代码都在我们的绝对控制之下，彻底杜绝代理劫持。
 
-## 2. 改造范围
+## 2. 核心 HTTP 客户端封装（直接复制使用）
 
-目前代码中有两处使用了飞书 SDK，都需要替换：
-1. **旧版 CLI 链路**：`src/feishu/client.ts` 和 `src/feishu/bitable.ts`（这是 `setup` 命令报错的根源）
-2. **新版插件链路**：`src/backend/FeishuMemoryBackend.ts`
-
-## 3. 核心 HTTP 客户端封装（直接复制使用）
-
-在 `src/feishu/` 目录下新建一个 `http.ts`，用原生的 `undici fetch` 封装飞书请求，**强制禁用代理**。
+在 `src/feishu/` 目录下新建一个 `http.ts`，用原生的 `undici fetch` 封装飞书请求，**强制禁用代理，并透传详细的错误信息给 Agent**。
 
 ```typescript
 // src/feishu/http.ts
@@ -30,7 +24,7 @@ const directAgent = new Agent({
   }
 });
 
-// 封装一个通用的飞书请求函数
+// 封装一个通用的飞书请求函数，增强错误处理
 export async function feishuFetch(url: string, options: any = {}) {
   const res = await undiciFetch(url, {
     ...options,
@@ -41,12 +35,16 @@ export async function feishuFetch(url: string, options: any = {}) {
     }
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Feishu API Error ${res.status}: ${body}`);
+  const data = await res.json().catch(() => null);
+
+  // 飞书 API 成功时 HTTP 状态码通常是 200，但业务 code 可能不是 0
+  if (!res.ok || (data && data.code !== 0)) {
+    const errorMsg = data ? JSON.stringify(data) : await res.text();
+    // 抛出包含详细飞书报错信息的 Error，方便 Agent 捕获和诊断
+    throw new Error(`Feishu API Error [HTTP ${res.status}]: ${errorMsg}`);
   }
 
-  return res.json();
+  return data;
 }
 
 // 维护一个全局的 Token 缓存
@@ -68,71 +66,83 @@ export async function getTenantAccessToken(appId: string, appSecret: string): Pr
     })
   });
 
-  if (data.code !== 0) {
-    throw new Error(`获取 tenant_access_token 失败: ${data.msg}`);
-  }
-
+  // 注意：获取 token 接口的返回值中，token 直接在顶层，不在 data 里
   cachedToken = data.tenant_access_token;
-  // expire_in 是秒，转换为毫秒，并提前 5 分钟（300000ms）过期
-  tokenExpireAt = Date.now() + (data.expire_in * 1000) - 300000;
+  // expire 是秒，转换为毫秒，并提前 5 分钟（300000ms）过期
+  tokenExpireAt = Date.now() + (data.expire * 1000) - 300000;
   
   return cachedToken;
 }
 ```
 
-## 4. 替换 `src/feishu/bitable.ts` 中的 SDK 调用
+## 3. 替换 SDK 调用的 API 映射表
 
-将 `bitable.ts` 中所有依赖 `client.bitable.xxx` 的代码，替换为直接调用 REST API。
+我已经通过 Context7 查证了飞书官方文档，以下是你们需要替换的所有 API 的精确写法和参数。
 
-例如，创建 Base 的接口：
-```typescript
-// 旧代码
-const res = await client.bitable.app.create({
-  data: { name, folder_token: '' },
-});
+### 3.1 创建多维表格 (Create Base)
+- **Method**: `POST`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps`
+- **Body**: `{ "name": "表格名称", "folder_token": "" }`
+- **Response**: `res.data.app.app_token`
 
-// 新代码
-const token = await getTenantAccessToken(process.env.FEISHU_APP_ID!, process.env.FEISHU_APP_SECRET!);
-const res = await feishuFetch('https://open.feishu.cn/open-apis/bitable/v1/apps', {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${token}` },
-  body: JSON.stringify({ name, folder_token: '' })
-});
-const appToken = res.data.app.app_token;
-```
+### 3.2 创建数据表 (Create Table)
+- **Method**: `POST`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables`
+- **Body**: 
+  ```json
+  {
+    "table": {
+      "default_view_name": "Grid",
+      "fields": [
+        { "field_name": "字段名", "type": 1 }
+      ]
+    }
+  }
+  ```
+- **Response**: `res.data.table_id`
 
-获取表格列表的接口：
-```typescript
-// 新代码
-const token = await getTenantAccessToken(process.env.FEISHU_APP_ID!, process.env.FEISHU_APP_SECRET!);
-const res = await feishuFetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables`, {
-  method: 'GET',
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-const tables = res.data.items;
-```
+### 3.3 列出数据表 (List Tables)
+- **Method**: `GET`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables`
+- **Response**: `res.data.items` (数组，包含 `table_id` 和 `name`)
 
-## 5. 替换 `FeishuMemoryBackend.ts` 中的 SDK 调用
+### 3.4 创建记录 (Create Record)
+- **Method**: `POST`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records`
+- **Body**: `{ "fields": { "字段名": "值" } }`
+- **Response**: `res.data.record.record_id`
 
-同理，在 `FeishuMemoryBackend.ts` 中，移除 `this.client = new lark.Client(...)`，改为在每次请求前获取 Token，然后调用 `feishuFetch`。
+### 3.5 批量获取记录 (Batch Get Records)
+- **Method**: `POST`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/batch_get`
+- **Body**: `{ "record_ids": ["rec1", "rec2"] }`
+- **Response**: `res.data.records`
 
-例如，创建记录的接口：
-```typescript
-// 新代码
-const token = await getTenantAccessToken(this.config.FEISHU_APP_ID, this.config.FEISHU_APP_SECRET);
-const res = await feishuFetch(`https://open.feishu.cn/open-apis/bitable/v1/apps/${this.appToken}/tables/${tableId}/records`, {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${token}` },
-  body: JSON.stringify({ fields })
-});
-const recordId = res.data.record.record_id;
-```
+### 3.6 搜索记录 (Search Records) - 替代原有的 `kwSearch`
+- **Method**: `POST`
+- **URL**: `https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/search?page_size=10`
+- **Body**:
+  ```json
+  {
+    "filter": {
+      "conjunction": "and",
+      "conditions": [
+        { "field_name": "状态", "operator": "is", "value": ["活跃"] },
+        { "field_name": "内容", "operator": "contains", "value": ["搜索词"] }
+      ]
+    },
+    "sort": [
+      { "field_name": "创建时间", "desc": true }
+    ]
+  }
+  ```
+- **Response**: `res.data.items`
 
-## 6. 总结
+## 4. 总结
 
 1. **彻底删除 `@larksuiteoapi/node-sdk` 依赖**。
 2. 使用 `undici` 的 `Agent` 强制直连，绕过任何环境变量代理。
-3. 飞书的 Bitable API 文档地址：[https://open.feishu.cn/document/server-docs/docs/bitable-v1/app/create](https://open.feishu.cn/document/server-docs/docs/bitable-v1/app/create)
-4. 按照上述模式，把 CRUD 操作全部替换为 `feishuFetch`。
+3. `feishuFetch` 已经封装了完善的错误抛出机制，如果飞书返回 400 或 125400x 错误码，Agent 会在日志中看到完整的 JSON 报错信息，方便排查。
+4. 按照上述 API 映射表，把 `src/feishu/bitable.ts` 和 `src/backend/FeishuMemoryBackend.ts` 中的 CRUD 操作全部替换为 `feishuFetch`。
 
 这不仅能彻底解决 400 代理报错，还能让我们的代码更轻量、更可控。请 AI 开发团队立即执行此重构。
