@@ -116,9 +116,11 @@ cd ~/mem-feishu
 FEISHU_APP_ID=<AppID> FEISHU_APP_SECRET=<AppSecret> node dist/index.js setup
 ```
 
-setup 命令会自动创建「AI 记忆库」多维表格。复制输出中的 `FEISHU_APP_TOKEN=Basz...`。
+setup 命令会自动创建「AI 记忆库」多维表格，并在输出中提供 App Token 和直接链接。
 
-> 飞书多维表格已创建！
+> **重要指令给 Agent**：
+> 必须向用户展示**完整的飞书多维表格直接链接**（格式为 `https://feishu.cn/base/xxxx`），而不仅仅是 Token ID。
+> 告诉用户："飞书多维表格已创建！你可以点击这个链接查看：[链接]"
 
 ---
 

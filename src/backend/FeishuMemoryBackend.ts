@@ -117,10 +117,8 @@ export class FeishuMemoryBackend {
     this.appSecret = config.FEISHU_APP_SECRET;
 
     // App Token 优先使用传入配置，其次读取本地缓存
+    // 允许为空——setup 阶段可能还没生成 token，真正调用 API 时再校验
     this.appToken = config.FEISHU_APP_TOKEN ?? this._readLocalAppToken() ?? '';
-    if (!this.appToken) {
-      throw new Error('[mem-feishu] 缺少 FEISHU_APP_TOKEN，请先运行 setup 命令');
-    }
 
     this.tableName = config.FEISHU_TABLE_NAME ?? 'AI 记忆库';
     this.googleApiKey = config.GOOGLE_API_KEY;
@@ -158,7 +156,7 @@ export class FeishuMemoryBackend {
 
     const headers = await this._authHeaders();
     const res = (await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/records`,
       { method: 'POST', headers, body: JSON.stringify({ fields }) }
     )) as { data: { record: { record_id: string } } };
 
@@ -214,7 +212,7 @@ export class FeishuMemoryBackend {
     try {
       const headers = await this._authHeaders();
       const res = (await feishuFetch(
-        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/search?page_size=${limit}`,
+        `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/records/search?page_size=${limit}`,
         {
           method: 'POST',
           headers,
@@ -297,7 +295,7 @@ export class FeishuMemoryBackend {
 
     try {
       const res = (await feishuFetch(
-        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/batch_get`,
+        `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/records/batch_get`,
         {
           method: 'POST',
           headers,
@@ -328,7 +326,7 @@ export class FeishuMemoryBackend {
 
     const headers = await this._authHeaders();
     await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/${recordId}`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/records/${recordId}`,
       { method: 'PUT', headers, body: JSON.stringify({ fields }) }
     );
 
@@ -365,7 +363,7 @@ export class FeishuMemoryBackend {
 
       const headers = await this._authHeaders();
       const res = (await feishuFetch(
-        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/search?${urlParams}`,
+        `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/records/search?${urlParams}`,
         {
           method: 'POST',
           headers,
@@ -701,7 +699,7 @@ Return ONLY valid JSON.
     const headers = await this._authHeaders();
 
     const listRes = (await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables`,
       { headers }
     )) as { data: { items: Array<{ table_id: string; name: string }> } };
 
@@ -715,7 +713,7 @@ Return ONLY valid JSON.
 
     // 创建新表
     const createRes = (await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables`,
       {
         method: 'POST',
         headers,
@@ -728,14 +726,14 @@ Return ONLY valid JSON.
 
     // 重命名默认字段为"记忆ID"
     const fieldsRes = (await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/fields`,
       { headers }
     )) as { data: { items: Array<{ field_id: string; field_name: string }> } };
 
     const defaultField = fieldsRes.data?.items?.[0];
     if (defaultField?.field_id) {
       await feishuFetch(
-        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields/${defaultField.field_id}`,
+        `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/fields/${defaultField.field_id}`,
         {
           method: 'PUT',
           headers,
@@ -760,7 +758,7 @@ Return ONLY valid JSON.
 
     for (const field of fieldsToCreate) {
       await feishuFetch(
-        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+        `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/fields`,
         { method: 'POST', headers, body: JSON.stringify(field) }
       );
     }
@@ -771,7 +769,7 @@ Return ONLY valid JSON.
   private async _ensureNewFields(tableId: string): Promise<void> {
     const headers = await this._authHeaders();
     const fieldsRes = (await feishuFetch(
-      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+      `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/fields`,
       { headers }
     )) as { data: { items: Array<{ field_name: string }> } };
 
@@ -788,7 +786,7 @@ Return ONLY valid JSON.
       if (!existingNames.has(field.field_name)) {
         try {
           await feishuFetch(
-            `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+            `${FEISHU_BASE}/bitable/v1/apps/${this._requireAppToken()}/tables/${tableId}/fields`,
             { method: 'POST', headers, body: JSON.stringify(field) }
           );
         } catch { /* 忽略已存在的情况 */ }
@@ -860,6 +858,18 @@ Return ONLY valid JSON.
       updatedAt: typeof fields[FIELD.UPDATED_AT] === 'number' ? (fields[FIELD.UPDATED_AT] as number) : undefined,
       recordId,
     };
+  }
+
+  // ── 私有：动态校验 App Token（延迟到真正调用 API 前）────────────────────
+
+  private _requireAppToken(): string {
+    const token = this.appToken || this._readLocalAppToken() || '';
+    if (!token) {
+      throw new Error('[mem-feishu] 未配置 FEISHU_APP_TOKEN。请先运行 setup 命令或在 OpenClaw 中配置。');
+    }
+    // 更新缓存，避免后续重复读文件
+    this.appToken = token;
+    return token;
   }
 
   // ── 私有：读取本地缓存的 App Token ────────────────────────────────────────

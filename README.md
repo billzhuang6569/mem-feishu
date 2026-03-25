@@ -18,13 +18,13 @@ mem-feishu 是一个为 [OpenClaw](https://openclaw.ai) 设计的记忆插件，
 **国内用户（Gitee，推荐）：**
 
 ```
-帮我安装飞书记忆插件：git clone https://gitee.com/billzhuang6569/mem-feishu && cd mem-feishu && npm install && npm run build，然后按照 skills/记忆安装/SKILL.md 引导我完成所有设置。
+帮我安装飞书记忆插件：git clone https://gitee.com/billzhuang6569/mem-feishu ~/mem-feishu && cd ~/mem-feishu && bash install.sh，然后严格按照 ~/mem-feishu/skills/记忆安装/SKILL.md 文件中的引导，一步步带我完成所有设置。
 ```
 
 **国际用户（GitHub）：**
 
 ```
-Help me install the mem-feishu plugin: git clone https://github.com/billzhuang6569/mem-feishu && cd mem-feishu && npm install && npm run build, then follow skills/记忆安装/SKILL.md to guide me through the full setup.
+Help me install the mem-feishu plugin: git clone https://github.com/billzhuang6569/mem-feishu ~/mem-feishu && cd ~/mem-feishu && bash install.sh, then strictly follow the guide in ~/mem-feishu/skills/记忆安装/SKILL.md to walk me through the setup step by step.
 ```
 
 OpenClaw 会自动执行命令，引导你完成飞书应用创建、记忆库初始化、权限配置，并将记忆规则写入 AGENTS.md，**全程无需手动操作**。
