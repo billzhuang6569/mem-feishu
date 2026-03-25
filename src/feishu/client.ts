@@ -1,5 +1,3 @@
-import * as lark from '@larksuiteoapi/node-sdk';
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,22 +28,14 @@ export function writeLocalConfig(patch: Partial<LocalConfig>): void {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...existing, ...patch }, null, 2));
 }
 
-let _client: lark.Client | null = null;
-
-export function getClient(): lark.Client {
-  if (!_client) {
-    const appId = process.env.FEISHU_APP_ID;
-    const appSecret = process.env.FEISHU_APP_SECRET;
-    if (!appId || !appSecret) {
-      throw new Error('缺少环境变量：FEISHU_APP_ID 或 FEISHU_APP_SECRET\n请先运行 setup 完成配置。');
-    }
-    // proxy: false 强制飞书请求直连，避免本地 http 代理将 HTTPS 请求降级为明文
-    // Google Embedding API 仍通过 undici ProxyAgent 走代理（见 embed.ts）
-    const httpInstance = axios.create({ proxy: false });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    _client = new lark.Client({ appId, appSecret, httpInstance: httpInstance as any });
+// 获取飞书应用凭证（用于 getTenantAccessToken）
+export function getCredentials(): { appId: string; appSecret: string } {
+  const appId = process.env.FEISHU_APP_ID;
+  const appSecret = process.env.FEISHU_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error('缺少环境变量：FEISHU_APP_ID 或 FEISHU_APP_SECRET\n请先运行 setup 完成配置。');
   }
-  return _client;
+  return { appId, appSecret };
 }
 
 // 获取 App Token：优先环境变量，其次本地配置文件

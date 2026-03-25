@@ -8,20 +8,21 @@
  * 且始终以飞书 record_id 作为向量键。
  */
 
-import * as lark from '@larksuiteoapi/node-sdk';
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import Database from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
-import { fetch as undiciFetch, ProxyAgent } from 'undici';
+import { fetch as undiciFetch, Agent, ProxyAgent } from 'undici';
+import { feishuFetch, getTenantAccessToken } from '../feishu/http.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../data');
 const DB_PATH = path.join(DATA_DIR, 'vectors.db');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+
+const FEISHU_BASE = 'https://open.feishu.cn/open-apis';
 
 // ── 类型定义 ────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,8 @@ const GEMINI_FLASH_MODEL = 'gemini-2.0-flash';
 // ── FeishuMemoryBackend ──────────────────────────────────────────────────────
 
 export class FeishuMemoryBackend {
-  private client: lark.Client;
+  private appId: string;
+  private appSecret: string;
   private appToken: string;
   private tableName: string;
   private googleApiKey: string;
@@ -111,15 +113,8 @@ export class FeishuMemoryBackend {
       throw new Error('[mem-feishu] 缺少 GOOGLE_API_KEY');
     }
 
-    // proxy: false 强制飞书请求直连，避免本地 http 代理将 HTTPS 请求降级为明文
-    // Google Embedding/Chat API 仍通过 undici ProxyAgent 走代理（见 _makeDispatcher）
-    const httpInstance = axios.create({ proxy: false });
-    this.client = new lark.Client({
-      appId: config.FEISHU_APP_ID,
-      appSecret: config.FEISHU_APP_SECRET,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      httpInstance: httpInstance as any,
-    });
+    this.appId = config.FEISHU_APP_ID;
+    this.appSecret = config.FEISHU_APP_SECRET;
 
     // App Token 优先使用传入配置，其次读取本地缓存
     this.appToken = config.FEISHU_APP_TOKEN ?? this._readLocalAppToken() ?? '';
@@ -161,10 +156,11 @@ export class FeishuMemoryBackend {
       [FIELD.UPDATED_AT]: now,
     };
 
-    const res = await this.client.bitable.appTableRecord.create({
-      path: { app_token: this.appToken, table_id: tableId },
-      data: { fields },
-    });
+    const headers = await this._authHeaders();
+    const res = (await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records`,
+      { method: 'POST', headers, body: JSON.stringify({ fields }) }
+    )) as { data: { record: { record_id: string } } };
 
     const recordId = res.data?.record?.record_id;
     const memory: Memory = {
@@ -197,7 +193,6 @@ export class FeishuMemoryBackend {
   // ── 向量语义搜索 ───────────────────────────────────────────────────────────
 
   async search(query: string, limit = 10): Promise<SearchResult[]> {
-    const tableId = await this._getTableId();
     const queryVec = await this._embed(query);
     const hits = this._vectorSearch(queryVec, limit);
     if (hits.length === 0) return [];
@@ -217,20 +212,25 @@ export class FeishuMemoryBackend {
   async kwSearch(query: string, limit = 10): Promise<Memory[]> {
     const tableId = await this._getTableId();
     try {
-      const res = await this.client.bitable.appTableRecord.search({
-        path: { app_token: this.appToken, table_id: tableId },
-        params: { page_size: limit },
-        data: {
-          filter: {
-            conjunction: 'and',
-            conditions: [
-              { field_name: FIELD.STATE, operator: 'is', value: ['活跃'] },
-              { field_name: FIELD.CONTENT, operator: 'contains', value: [query] },
-            ],
-          },
-          sort: [{ field_name: FIELD.CREATED_AT, desc: true }],
-        },
-      });
+      const headers = await this._authHeaders();
+      const res = (await feishuFetch(
+        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/search?page_size=${limit}`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            filter: {
+              conjunction: 'and',
+              conditions: [
+                { field_name: FIELD.STATE, operator: 'is', value: ['活跃'] },
+                { field_name: FIELD.CONTENT, operator: 'contains', value: [query] },
+              ],
+            },
+            sort: [{ field_name: FIELD.CREATED_AT, desc: true }],
+          }),
+        }
+      )) as { data: { items: Array<{ record_id: string; fields: Record<string, unknown> }> } };
+
       return (res.data?.items ?? []).map((item) =>
         this._parseFields(item.fields ?? {}, item.record_id)
       );
@@ -265,7 +265,6 @@ export class FeishuMemoryBackend {
       scores.set(key, (scores.get(key) ?? 0) + 1.0 / (RRF_K + rank + 1));
     });
 
-    // 合并去重（向量结果优先携带 score；关键词结果不在向量结果中时追加）
     const allById = new Map<string, SearchResult>();
     for (const m of vec) {
       allById.set(m.recordId ?? m.id, m);
@@ -289,21 +288,27 @@ export class FeishuMemoryBackend {
       .slice(0, limit);
   }
 
-  // ── 按 record_id 批量获取 ─────────────────────────────────────────────────
+  // ── 按 record_id 批量获取（batch_get）────────────────────────────────────
 
   async getByIds(recordIds: string[]): Promise<Memory[]> {
     if (recordIds.length === 0) return [];
-    const results: Memory[] = [];
-    for (const recordId of recordIds) {
-      try {
-        const res = await this.client.bitable.appTableRecord.get({
-          path: { app_token: this.appToken, table_id: await this._getTableId(), record_id: recordId },
-        });
-        const f = res.data?.record?.fields;
-        if (f) results.push(this._parseFields(f, recordId));
-      } catch { /* 记录可能已删除，跳过 */ }
+    const tableId = await this._getTableId();
+    const headers = await this._authHeaders();
+
+    try {
+      const res = (await feishuFetch(
+        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/batch_get`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ record_ids: recordIds }),
+        }
+      )) as { data: { records: Array<{ record_id: string; fields: Record<string, unknown> }> } };
+
+      return (res.data?.records ?? []).map((r) => this._parseFields(r.fields ?? {}, r.record_id));
+    } catch {
+      return [];
     }
-    return results;
   }
 
   // ── 更新记录（飞书 + 向量双写）────────────────────────────────────────────
@@ -321,10 +326,11 @@ export class FeishuMemoryBackend {
     if (patch.supersededBy !== undefined) fields[FIELD.SUPERSEDED_BY] = patch.supersededBy;
     if (patch.content !== undefined) fields[FIELD.CONTENT] = patch.content;
 
-    await this.client.bitable.appTableRecord.update({
-      path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
-      data: { fields },
-    });
+    const headers = await this._authHeaders();
+    await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/${recordId}`,
+      { method: 'PUT', headers, body: JSON.stringify({ fields }) }
+    );
 
     // 如果内容更新了，重新向量化
     if (patch.content) {
@@ -353,20 +359,31 @@ export class FeishuMemoryBackend {
     let hasMore = true;
 
     while (hasMore && allMemories.length < limit) {
-      const res = await this.client.bitable.appTableRecord.search({
-        path: { app_token: this.appToken, table_id: tableId },
-        params: {
-          page_size: Math.min(limit - allMemories.length, 500),
-          page_token: pageToken,
-        },
+      const pageSize = Math.min(limit - allMemories.length, 500);
+      const urlParams = new URLSearchParams({ page_size: String(pageSize) });
+      if (pageToken) urlParams.set('page_token', pageToken);
+
+      const headers = await this._authHeaders();
+      const res = (await feishuFetch(
+        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/records/search?${urlParams}`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            sort: [{ field_name: FIELD.CREATED_AT, desc: true }],
+            filter: {
+              conjunction: 'and',
+              conditions: [{ field_name: FIELD.STATE, operator: 'is', value: ['活跃'] }],
+            },
+          }),
+        }
+      )) as {
         data: {
-          sort: [{ field_name: FIELD.CREATED_AT, desc: true }],
-          filter: {
-            conjunction: 'and',
-            conditions: [{ field_name: FIELD.STATE, operator: 'is', value: ['活跃'] }],
-          },
-        },
-      });
+          items: Array<{ record_id: string; fields: Record<string, unknown> }>;
+          has_more: boolean;
+          page_token: string;
+        };
+      };
 
       for (const item of res.data?.items ?? []) {
         allMemories.push(this._parseFields(item.fields ?? {}, item.record_id));
@@ -424,12 +441,10 @@ Return ONLY valid JSON. No markdown fences, no explanation.
     project?: string
   ): Promise<void> {
     for (const fact of facts) {
-      // 搜索相关历史记忆
       const related = await this.hybridSearch(fact, 5);
       const activeRelated = related.filter((m) => m.state === '活跃');
 
       if (activeRelated.length === 0) {
-        // 没有相关历史，直接 ADD
         await this.store({
           content: fact,
           tags: ['自动'],
@@ -441,9 +456,8 @@ Return ONLY valid JSON. No markdown fences, no explanation.
         continue;
       }
 
-      // 有相关历史，让 LLM 决策
       const decision = await this._reconcileWithLLM(fact, activeRelated);
-      await this._applyReconciliation(decision, fact, sessionId, agentId, project);
+      await this._applyReconciliation(decision, fact, sessionId, agentId, project, activeRelated);
     }
   }
 
@@ -495,7 +509,6 @@ Return ONLY valid JSON.
       };
       return (parsed.memory ?? []) as { id: string; text: string; event: 'ADD' | 'UPDATE' | 'DELETE' | 'NOOP'; old_memory?: string }[];
     } catch {
-      // 解析失败时默认 ADD
       return [{ id: 'new', text: newFact, event: 'ADD' }];
     }
   }
@@ -532,7 +545,6 @@ Return ONLY valid JSON.
       // pinned 类型保护：不允许自动 UPDATE/DELETE
       if (target.memoryType === 'pinned') {
         if (decision.event === 'UPDATE' || decision.event === 'DELETE') {
-          // 降级为 ADD（新增 insight）
           await this.store({
             content: decision.text || originalFact,
             tags: ['自动'],
@@ -546,7 +558,6 @@ Return ONLY valid JSON.
       }
 
       if (decision.event === 'UPDATE' && target.recordId) {
-        // 新增 insight，旧记录归档
         const newMem = await this.store({
           content: decision.text,
           tags: ['自动'],
@@ -570,7 +581,7 @@ Return ONLY valid JSON.
   private async _callGeminiChat(systemInstruction: string, userMessage: string): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FLASH_MODEL}:generateContent?key=${this.googleApiKey}`;
 
-    const dispatcher = this._makeDispatcher();
+    const dispatcher = this._makeGoogleDispatcher();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await (undiciFetch as any)(url, {
       method: 'POST',
@@ -598,7 +609,7 @@ Return ONLY valid JSON.
 
   private async _embed(text: string): Promise<Float32Array> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${this.googleApiKey}`;
-    const dispatcher = this._makeDispatcher();
+    const dispatcher = this._makeGoogleDispatcher();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await (undiciFetch as any)(url, {
       method: 'POST',
@@ -687,36 +698,50 @@ Return ONLY valid JSON.
   // ── 私有：飞书表结构确保 ──────────────────────────────────────────────────
 
   private async _ensureTable(): Promise<string> {
-    const listRes = await this.client.bitable.appTable.list({
-      path: { app_token: this.appToken },
-    });
+    const headers = await this._authHeaders();
+
+    const listRes = (await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables`,
+      { headers }
+    )) as { data: { items: Array<{ table_id: string; name: string }> } };
+
     const tables = listRes.data?.items ?? [];
     const existing = tables.find((t) => t.name === this.tableName);
 
     if (existing?.table_id) {
-      // 表已存在，确保新字段存在（幂等）
       await this._ensureNewFields(existing.table_id);
       return existing.table_id;
     }
 
     // 创建新表
-    const createRes = await this.client.bitable.appTable.create({
-      path: { app_token: this.appToken },
-      data: { table: { name: this.tableName } },
-    });
+    const createRes = (await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ table: { name: this.tableName } }),
+      }
+    )) as { data: { table_id: string } };
+
     const tableId = createRes.data?.table_id;
     if (!tableId) throw new Error('[mem-feishu] 创建多维表格失败');
 
     // 重命名默认字段为"记忆ID"
-    const fieldsRes = await this.client.bitable.appTableField.list({
-      path: { app_token: this.appToken, table_id: tableId },
-    });
+    const fieldsRes = (await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+      { headers }
+    )) as { data: { items: Array<{ field_id: string; field_name: string }> } };
+
     const defaultField = fieldsRes.data?.items?.[0];
     if (defaultField?.field_id) {
-      await this.client.bitable.appTableField.update({
-        path: { app_token: this.appToken, table_id: tableId, field_id: defaultField.field_id },
-        data: { field_name: FIELD.ID, type: FieldType.TEXT },
-      });
+      await feishuFetch(
+        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields/${defaultField.field_id}`,
+        {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ field_name: FIELD.ID, type: FieldType.TEXT }),
+        }
+      );
     }
 
     // 创建所有字段
@@ -734,20 +759,22 @@ Return ONLY valid JSON.
     ];
 
     for (const field of fieldsToCreate) {
-      await this.client.bitable.appTableField.create({
-        path: { app_token: this.appToken, table_id: tableId },
-        data: field,
-      });
+      await feishuFetch(
+        `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+        { method: 'POST', headers, body: JSON.stringify(field) }
+      );
     }
 
     return tableId;
   }
 
-  // 对已存在的旧表，补充 v2.0 新增字段（幂等）
   private async _ensureNewFields(tableId: string): Promise<void> {
-    const fieldsRes = await this.client.bitable.appTableField.list({
-      path: { app_token: this.appToken, table_id: tableId },
-    });
+    const headers = await this._authHeaders();
+    const fieldsRes = (await feishuFetch(
+      `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+      { headers }
+    )) as { data: { items: Array<{ field_name: string }> } };
+
     const existingNames = new Set((fieldsRes.data?.items ?? []).map((f) => f.field_name ?? ''));
 
     const newFields = [
@@ -760,10 +787,10 @@ Return ONLY valid JSON.
     for (const field of newFields) {
       if (!existingNames.has(field.field_name)) {
         try {
-          await this.client.bitable.appTableField.create({
-            path: { app_token: this.appToken, table_id: tableId },
-            data: field,
-          });
+          await feishuFetch(
+            `${FEISHU_BASE}/bitable/v1/apps/${this.appToken}/tables/${tableId}/fields`,
+            { method: 'POST', headers, body: JSON.stringify(field) }
+          );
         } catch { /* 忽略已存在的情况 */ }
       }
     }
@@ -774,6 +801,13 @@ Return ONLY valid JSON.
       this.tableId = await this._ensureTable();
     }
     return this.tableId;
+  }
+
+  // ── 私有：获取带 Authorization 的请求头 ──────────────────────────────────
+
+  private async _authHeaders(): Promise<Record<string, string>> {
+    const token = await getTenantAccessToken(this.appId, this.appSecret);
+    return { Authorization: `Bearer ${token}` };
   }
 
   // ── 私有：字段解析 ────────────────────────────────────────────────────────
@@ -806,7 +840,6 @@ Return ONLY valid JSON.
       ? String((sourceRaw as { text: unknown }).text)
       : String(sourceRaw ?? 'manual');
 
-    // memoryType：空值默认 pinned（老数据兼容）
     const memTypeRaw = fields[FIELD.MEMORY_TYPE];
     const memTypeStr = typeof memTypeRaw === 'object' && memTypeRaw !== null && 'text' in memTypeRaw
       ? String((memTypeRaw as { text: unknown }).text)
@@ -841,9 +874,9 @@ Return ONLY valid JSON.
     return undefined;
   }
 
-  // ── 私有：代理（复用 embed.ts 的逻辑）────────────────────────────────────
+  // ── 私有：Google API 代理（飞书直连，Google 可走代理）────────────────────
 
-  private _makeDispatcher() {
+  private _makeGoogleDispatcher() {
     const proxy = process.env.https_proxy ?? process.env.HTTPS_PROXY
       ?? process.env.http_proxy ?? process.env.HTTP_PROXY;
     if (proxy) return new ProxyAgent(proxy);
