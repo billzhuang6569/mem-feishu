@@ -4,6 +4,7 @@ import { Type } from "@sinclair/typebox";
 import { FeishuClient } from "./feishu-client.js";
 import { MemoryService } from "./memory-service.js";
 import type { PluginConfig } from "./config.js";
+import { ensureMemorySetup } from "./setup.js";
 
 export default definePluginEntry({
   id: "mem-feishu-v2",
@@ -20,6 +21,57 @@ export default definePluginEntry({
       appSecret: config.feishu.appSecret
     });
     const service = new MemoryService(client, config);
+
+    api.registerTool((ctx) => ({
+      name: "mem_feishu_setup",
+      label: "Mem Setup",
+      description: "Setup memory base and table for current agent",
+      parameters: Type.Object({
+        appTokenOrUrl: Type.Optional(Type.String({ minLength: 1 }))
+      }),
+      async execute(_toolCallId, params, _signal) {
+        const agentId = ctx.agentId ?? "default";
+        const setupConfig: PluginConfig =
+          params.appTokenOrUrl && params.appTokenOrUrl.trim().length > 0
+            ? {
+                ...config,
+                feishu: {
+                  ...config.feishu,
+                  appToken: params.appTokenOrUrl.trim()
+                }
+              }
+            : config;
+        try {
+          const result = await ensureMemorySetup(client, setupConfig, agentId);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Setup success. appToken=${result.appToken}, tableId=${result.tableId}, tableName=${result.tableName}`
+              }
+            ],
+            details: {
+              success: true,
+              ...result
+            }
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Setup failed: ${message}`
+              }
+            ],
+            details: {
+              success: false,
+              error: message
+            }
+          };
+        }
+      }
+    }));
 
     api.registerTool((ctx) => ({
       name: "memory_store",
@@ -71,7 +123,11 @@ export default definePluginEntry({
         minScore: Type.Optional(Type.Number({ minimum: 0, maximum: 1 }))
       }),
       async execute(_toolCallId, params, _signal) {
-        const memories = await service.recall(ctx.agentId ?? "default", params);
+        const memories = await service.recall(ctx.agentId ?? "default", {
+          ...params,
+          limit: params.limit ?? config.recallLimit ?? 5,
+          minScore: params.minScore ?? config.recallMinScore ?? 0.3
+        });
         return {
           content: [
             {

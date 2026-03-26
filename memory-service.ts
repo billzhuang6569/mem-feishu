@@ -41,6 +41,7 @@ export class MemoryService {
     return this.mapRecord(created.recordId, created.fields);
   }
 
+  // TODO: M4 阶段接入 VikingDB 后，废弃全量拉取本地过滤的逻辑，改用向量检索
   async recall(agentId: string, input: MemoryRecallInput): Promise<MemoryRecord[]> {
     const context = await this.getAgentTable(agentId);
     const allRecords = await this.client.listRecords(context.appToken, context.tableId);
