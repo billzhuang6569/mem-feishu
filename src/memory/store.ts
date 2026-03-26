@@ -1,0 +1,28 @@
+import { addRecord, ensureTable } from '../feishu/bitable.js';
+import { upsertVector } from '../vector/db.js';
+import { embed } from '../vector/embed.js';
+import type { Memory, MemoryInput } from '../feishu/types.js';
+
+let _tableId: string | null = null;
+
+export async function getTableId(): Promise<string> {
+  if (!_tableId) {
+    _tableId = await ensureTable();
+  }
+  return _tableId;
+}
+
+export async function saveMemory(input: MemoryInput): Promise<Memory> {
+  const tableId = await getTableId();
+  const memory = await addRecord(tableId, input);
+  // 同步写入向量库（用飞书 record_id 作为键，与 getRecordsByIds 保持一致）
+  try {
+    if (memory.recordId) {
+      const vec = await embed(memory.content);
+      upsertVector(memory.recordId, vec);
+    }
+  } catch (e) {
+    console.error('[mem-feishu] 向量写入失败（不影响飞书存储）:', e);
+  }
+  return memory;
+}
