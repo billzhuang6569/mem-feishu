@@ -1,0 +1,116 @@
+{
+  "id": "mem-feishu-v2",
+  "name": "mem-feishu-v2",
+  "description": "Feishu Bitable memory plugin for OpenClaw",
+  "kind": "memory",
+  "uiHints": {
+    "feishu.appId": {
+      "label": "Feishu App ID"
+    },
+    "feishu.appSecret": {
+      "label": "Feishu App Secret",
+      "sensitive": true
+    },
+    "feishu.appToken": {
+      "label": "Feishu App Token"
+    },
+    "feishu.adminEmail": {
+      "label": "Feishu Admin Email"
+    },
+    "vikingdb.accessKeyId": {
+      "label": "VikingDB Access Key ID",
+      "sensitive": true
+    },
+    "vikingdb.accessKeySecret": {
+      "label": "VikingDB Access Key Secret",
+      "sensitive": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "feishu": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "appId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "appSecret": {
+            "type": "string",
+            "minLength": 1
+          },
+          "appToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "adminEmail": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "appId",
+          "appSecret"
+        ]
+      },
+      "vikingdb": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "accessKeyId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "accessKeySecret": {
+            "type": "string",
+            "minLength": 1
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1
+          },
+          "collectionName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "embeddingModel": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true
+      },
+      "recallLimit": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5
+      },
+      "recallMinScore": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.3
+      }
+    },
+    "required": [
+      "feishu"
+    ]
+  }
+}
