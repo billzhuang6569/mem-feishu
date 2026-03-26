@@ -100,6 +100,7 @@ export class MemoryService {
       }
       const recordIds = await this.vikingdb!.searchRecordIdsByVector({
         collectionName: this.config.vikingdb!.collectionName ?? "",
+        indexName: this.config.vikingdb!.indexName ?? "",
         vector,
         agentId,
         limit: Math.max(limit * 3, 10)
@@ -157,7 +158,12 @@ export class MemoryService {
   }
 
   private isVikingEnabled(): boolean {
-    return Boolean(this.config.vikingdb?.enabled && this.vikingdb && this.config.vikingdb.collectionName);
+    return Boolean(
+      this.config.vikingdb?.enabled &&
+        this.vikingdb &&
+        this.config.vikingdb.collectionName &&
+        this.config.vikingdb.indexName
+    );
   }
 
   private async getAgentTable(agentId: string): Promise<AgentTableContext> {

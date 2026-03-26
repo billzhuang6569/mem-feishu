@@ -19,6 +19,7 @@ const VikingDBConfigSchema = Type.Object(
     accessKeySecret: Type.Optional(Type.String({ minLength: 1 })),
     host: Type.Optional(Type.String({ minLength: 1 })),
     collectionName: Type.Optional(Type.String({ minLength: 1 })),
+    indexName: Type.Optional(Type.String({ minLength: 1 })),
     embeddingModel: Type.Optional(Type.String({ minLength: 1 }))
   },
   { additionalProperties: false }
@@ -69,6 +70,7 @@ export function parsePluginConfig(input: unknown): PluginConfig {
       "accessKeySecret",
       "host",
       "collectionName",
+      "indexName",
       "embeddingModel"
     ];
     const missingFields = requiredVikingFields.filter((field) => {

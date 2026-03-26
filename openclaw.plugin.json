@@ -24,6 +24,9 @@
     "vikingdb.accessKeySecret": {
       "label": "VikingDB Access Key Secret",
       "sensitive": true
+    },
+    "vikingdb.indexName": {
+      "label": "VikingDB Index Name"
     }
   },
   "configSchema": {
@@ -77,6 +80,10 @@
             "minLength": 1
           },
           "collectionName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "indexName": {
             "type": "string",
             "minLength": 1
           },
