@@ -22,7 +22,7 @@ export default definePluginEntry({
       appId: config.feishu.appId,
       appSecret: config.feishu.appSecret
     });
-    const service = new MemoryService(client, config);
+    const service = new MemoryService(client, config, api.logger);
     const syncManager = new MemorySyncManager(client, config, api.logger);
 
     api.on("agent_end", async (event, ctx) => {
