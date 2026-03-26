@@ -85,17 +85,19 @@ export class VikingDBClient {
 
   async searchRecordIdsByVector(params: {
     collectionName: string;
+    indexName: string;
     vector: number[];
     agentId: string;
     limit: number;
   }): Promise<string[]> {
     const response = await this.request<unknown>(
       "POST",
-      "/api/index/search",
+      "/api/vikingdb/data/search/vector",
       {
         collection_name: params.collectionName,
+        index_name: params.indexName,
         limit: params.limit,
-        vector: params.vector,
+        dense_vector: params.vector,
         output_fields: ["record_id", "agent_id"],
         filter: `agent_id == "${params.agentId}"`
       }
@@ -177,8 +179,20 @@ function extractRecordIds(raw: unknown, limit: number): string[] {
     results?: unknown[];
     result_list?: unknown[];
     list?: unknown[];
+    result?: {
+      data?: unknown[];
+      result_list?: unknown[];
+    };
   };
-  for (const list of [source.items, source.data, source.results, source.result_list, source.list]) {
+  for (const list of [
+    source.items,
+    source.data,
+    source.results,
+    source.result_list,
+    source.list,
+    source.result?.data,
+    source.result?.result_list
+  ]) {
     if (Array.isArray(list)) {
       candidates.push(...list);
     }
