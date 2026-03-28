@@ -1,5 +1,5 @@
 import type { PluginConfig } from "./config.js";
-import { FeishuClient } from "./feishu-client.js";
+import { FeishuApiError, FeishuClient } from "./feishu-client.js";
 
 const MEMORY_BASE_NAME = "OpenClaw-Memory-Base";
 
@@ -47,7 +47,21 @@ export async function ensureMemorySetup(
     appToken = created.appToken;
     createdBase = true;
     if (config.feishu.adminEmail) {
-      await client.addCollaboratorByEmail(appToken, config.feishu.adminEmail);
+      try {
+        await client.addCollaboratorByEmail(appToken, config.feishu.adminEmail);
+      } catch (error) {
+        if (
+          error instanceof FeishuApiError &&
+          error.path.startsWith("/drive/v1/permissions/") &&
+          (error.code === 1063001 || error.code === 1063003 || error.code === 1063005)
+        ) {
+          console.warn(
+            `[mem-feishu-v2] skip collaborator grant for ${config.feishu.adminEmail}: code=${error.code}, msg=${error.msg}`
+          );
+        } else {
+          throw error;
+        }
+      }
     }
   }
 

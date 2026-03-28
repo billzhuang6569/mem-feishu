@@ -42,6 +42,18 @@ const CONTENT_TYPE = "application/json; charset=utf-8";
 const MAX_RETRY = 3;
 
 export class FeishuPermissionError extends Error {}
+export class FeishuApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: number,
+    readonly msg: string,
+    readonly method: string,
+    readonly path: string
+  ) {
+    super(message);
+  }
+}
 
 export class FeishuClient {
   private token?: string;
@@ -245,7 +257,14 @@ export class FeishuClient {
     }
 
     if (!response.ok || json.code !== 0) {
-      throw new Error(`Feishu API error: status=${response.status}, code=${json.code}, msg=${json.msg}`);
+      throw new FeishuApiError(
+        `Feishu API error: status=${response.status}, code=${json.code}, msg=${json.msg}, method=${method}, path=${path}`,
+        response.status,
+        json.code,
+        json.msg,
+        method,
+        path
+      );
     }
 
     return (json.data ?? ({} as TData)) as TData;
