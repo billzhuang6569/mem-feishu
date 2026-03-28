@@ -24,6 +24,22 @@ npm run build
 openclaw plugins install -l ~/.openclaw/extensions/mem-feishu-v2
 ```
 
+安装后请显式启用插件并切换 memory slot：
+
+```bash
+openclaw plugins enable mem-feishu-v2
+openclaw config set plugins.slots.memory mem-feishu-v2
+```
+
+然后执行诊断，确认 memory slot 和插件状态一致：
+
+```bash
+openclaw plugins inspect mem-feishu-v2
+openclaw plugins doctor
+```
+
+注意：不要使用 `agents.defaults.memorySearch.plugin` 来切换记忆插件。`mem-feishu-v2` 属于 memory 插件槽位，正确开关是 `plugins.slots.memory`。
+
 执行完毕后，请重启 OpenClaw Gateway：
 
 ```bash
