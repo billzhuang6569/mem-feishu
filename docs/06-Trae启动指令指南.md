@@ -8,7 +8,7 @@
 
 根据 Trae 官方文档 [1]，Trae 的规则系统分为**个人规则**和**项目规则**两类。项目规则以 `.md` 文件的形式存放在 `.trae/rules/` 目录下，通过 YAML front matter 控制生效方式。
 
-我们为 mem-feishu-v2 设计了 **4 个项目规则 + 1 个 Skill**，按职责拆分，避免单个规则文件过于臃肿（Trae 官方建议：如果 Rules 文件太臃肿，应该把工作流指令移到 Skills 中 [2]）。
+我们为 mem-feishu-v2 设计了 **5 个项目规则 + 1 个 Skill**，按职责拆分，避免单个规则文件过于臃肿（Trae 官方建议：如果 Rules 文件太臃肿，应该把工作流指令移到 Skills 中 [2]）。
 
 | 文件名 | 生效方式 | 职责 |
 |--------|----------|------|
@@ -16,6 +16,7 @@
 | `02-openclaw-sdk.md` | **指定文件生效** | OpenClaw SDK 的导入路径、工具注册、生命周期钩子规范 |
 | `03-feishu-api.md` | **指定文件生效** | 飞书 API 鉴权、数据格式、错误处理规范 |
 | `04-vikingdb-api.md` | **指定文件生效** | VikingDB 模型、签名、架构规范 |
+| `05-research-debug-workflow.md` | **始终生效** | 开发/调试阶段优先使用 `research/` 文档并执行插件诊断清单 |
 | `SKILL.md` | **按需调用** | 官方文档索引（OpenClaw / 飞书 / VikingDB 的 URL 清单） |
 
 ---
@@ -31,7 +32,8 @@ mem-feishu-v2/
 │       ├── 01-core-workflow.md      ← 始终生效
 │       ├── 02-openclaw-sdk.md       ← 编辑 index.ts 等时生效
 │       ├── 03-feishu-api.md         ← 编辑 feishu-client.ts 等时生效
-│       └── 04-vikingdb-api.md       ← 编辑 vikingdb-client.ts 等时生效
+│       ├── 04-vikingdb-api.md       ← 编辑 vikingdb-client.ts 等时生效
+│       └── 05-research-debug-workflow.md ← 始终生效（开发/调试优先 research）
 ├── docs/
 │   ├── 01-PRD-项目需求与架构设计.md
 │   └── 02-开发规范与Trae-Rules.md
