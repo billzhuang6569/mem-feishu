@@ -10,7 +10,7 @@
 cd ~/.openclaw/extensions/
 git clone https://github.com/billzhuang6569/mem-feishu.git -b v2 mem-feishu-v2
 cd mem-feishu-v2
-npm install
+npm install --include=dev
 npm run build
 ```
 

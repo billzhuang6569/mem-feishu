@@ -7,7 +7,7 @@ const FeishuConfigSchema = Type.Object(
     appId: Type.String({ minLength: 1 }),
     appSecret: Type.String({ minLength: 1 }),
     appToken: Type.Optional(Type.String({ minLength: 1 })),
-    adminEmail: Type.Optional(Type.String({ format: "email" }))
+    adminEmail: Type.Optional(Type.String({ minLength: 3 }))
   },
   { additionalProperties: false }
 );

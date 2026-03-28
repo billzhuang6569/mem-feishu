@@ -5,6 +5,7 @@ export interface FeishuAuthConfig {
 
 export interface FeishuCreateAppResponse {
   appToken: string;
+  defaultTableId?: string;
   url?: string;
 }
 
@@ -62,13 +63,14 @@ export class FeishuClient {
   constructor(private readonly auth: FeishuAuthConfig) {}
 
   async createBitableApp(name: string): Promise<FeishuCreateAppResponse> {
-    const data = await this.request<{ app: { app_token: string; url?: string } }>(
+    const data = await this.request<{ app: { app_token: string; default_table_id?: string; url?: string } }>(
       "POST",
       "/bitable/v1/apps",
       { name }
     );
     return {
       appToken: data.app.app_token,
+      defaultTableId: data.app.default_table_id,
       url: data.app.url
     };
   }
@@ -96,14 +98,24 @@ export class FeishuClient {
   }
 
   async createTable(appToken: string, tableName: string): Promise<FeishuTable> {
-    const data = await this.request<{ table: { table_id: string; name: string } }>(
+    const data = await this.request<{
+      table?: { table_id?: string; name?: string };
+      table_id?: string;
+      name?: string;
+      default_table_id?: string;
+    }>(
       "POST",
       `/bitable/v1/apps/${appToken}/tables`,
       { table: { name: tableName } }
     );
+    const tableId = data.table?.table_id ?? data.table_id ?? data.default_table_id;
+    const name = data.table?.name ?? data.name ?? tableName;
+    if (!tableId) {
+      throw new Error(`Feishu createTable response missing table id: ${JSON.stringify(data)}`);
+    }
     return {
-      tableId: data.table.table_id,
-      name: data.table.name
+      tableId,
+      name
     };
   }
 

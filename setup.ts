@@ -37,6 +37,7 @@ export async function ensureMemorySetup(
 ): Promise<SetupResult> {
   let appToken = config.feishu.appToken;
   let createdBase = false;
+  let defaultTableId: string | undefined;
 
   if (appToken) {
     appToken = extractAppToken(appToken) ?? appToken;
@@ -45,6 +46,7 @@ export async function ensureMemorySetup(
   if (!appToken) {
     const created = await client.createBitableApp(MEMORY_BASE_NAME);
     appToken = created.appToken;
+    defaultTableId = created.defaultTableId;
     createdBase = true;
     if (config.feishu.adminEmail) {
       try {
@@ -69,12 +71,40 @@ export async function ensureMemorySetup(
   const tables = await client.listTables(appToken);
   const existing = tables.find((table) => table.name === targetTableName);
   let tableId = existing?.tableId;
+  let tableName = existing?.name ?? targetTableName;
   let createdTable = false;
 
+  if (!tableId && defaultTableId) {
+    const defaultTable = tables.find((table) => table.tableId === defaultTableId);
+    tableId = defaultTable?.tableId ?? defaultTableId;
+    tableName = defaultTable?.name ?? targetTableName;
+  }
+
   if (!tableId) {
-    const createdTableResult = await client.createTable(appToken, targetTableName);
-    tableId = createdTableResult.tableId;
-    createdTable = true;
+    try {
+      const createdTableResult = await client.createTable(appToken, targetTableName);
+      tableId = createdTableResult.tableId;
+      tableName = createdTableResult.name;
+      createdTable = true;
+    } catch (error) {
+      const refreshedTables = await client.listTables(appToken);
+      const recoveredTable =
+        refreshedTables.find((table) => table.name === targetTableName) ??
+        (createdBase ? refreshedTables[0] : undefined);
+      if (recoveredTable) {
+        tableId = recoveredTable.tableId;
+        tableName = recoveredTable.name;
+        console.warn(
+          `[mem-feishu-v2] fallback to existing table ${recoveredTable.tableId} after createTable failure: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  if (!tableId) {
+    throw new Error(`Failed to resolve target table for appToken=${appToken}, agentId=${agentId}`);
   }
 
   await ensureTableFields(client, appToken, tableId);
@@ -82,7 +112,7 @@ export async function ensureMemorySetup(
   return {
     appToken,
     tableId,
-    tableName: targetTableName,
+    tableName,
     createdBase,
     createdTable
   };

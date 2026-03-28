@@ -30,13 +30,13 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@sinclair/typebox": "^0.34.41"
+    "@sinclair/typebox": "^0.34.41",
+    "typescript": "^5.8.3"
   },
   "peerDependencies": {
     "openclaw": ">=2026.3.22"
   },
   "devDependencies": {
-    "@types/node": "^22.15.3",
-    "typescript": "^5.8.3"
+    "@types/node": "^22.15.3"
   }
 }

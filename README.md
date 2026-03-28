@@ -77,7 +77,7 @@ git clone https://github.com/billzhuang6569/mem-feishu.git -b v2 mem-feishu-v2
 
 # 2. 安装依赖并编译
 cd mem-feishu-v2
-npm install
+npm install --include=dev
 npm run build
 
 # 3. 注册插件
